@@ -9,6 +9,11 @@ kotlinxSerializationJSON = "1.9.0"
 kotlinxCoroutines = "1.10.2"
 hadoop = "3.4.2"
 gcsConnector = "4.0.4"
+hive = "4.2.0"
+junitJupiter = "5.11.4"
+junitPlatform = "1.11.4"
+slf4j = "2.0.16"
+testcontainers = "1.20.6"
 
 
 [libraries]
@@ -29,6 +34,12 @@ hadoopYarnCommon = { module = "org.apache.hadoop:hadoop-yarn-common", version.re
 gcsConnector = { module = "com.google.cloud.bigdataoss:gcs-connector", version.ref = "gcsConnector" }
 gcsio = { module = "com.google.cloud.bigdataoss:gcsio", version.ref = "gcsConnector" }
 gcsUtilHadoop = { module = "com.google.cloud.bigdataoss:util-hadoop", version.ref = "gcsConnector" }
+
+hiveMetastore = { module = "org.apache.hive:hive-metastore", version.ref = "hive" }
+junitJupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiter" }
+junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitPlatform" }
+slf4jSimple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+testcontainersJunitJupiter = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
 
 # Libraries can be bundled together for easier import
 [bundles]

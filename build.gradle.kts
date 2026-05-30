@@ -14,6 +14,10 @@ subprojects {
     tasks.register<DependencyReportTask>("allDependencies") {}
 }
 
+tasks.register("smokeTest") {
+    dependsOn(":smoke-test:test")
+}
+
 configure<ReleaseExtension> {
     buildTasks.set(listOf(":image:dockerReleaseImages"))
     versionPropertyFile.set("gradle.properties")

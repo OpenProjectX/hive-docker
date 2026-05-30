@@ -28,6 +28,7 @@ data class HiveTarballImage(
     val hiveUrl: String,
     val vanillaRepository: String,
     val customRepository: String,
+    val jdkVersion: Int,
 )
 
 val registry = providers.gradleProperty("imageRegistry").orElse("openprojectx")
@@ -46,6 +47,7 @@ val images = listOf(
         hiveUrl = "https://archive.apache.org/dist/hive/hive-3.1.3/apache-hive-3.1.3-bin.tar.gz",
         vanillaRepository = "hive-vanilla",
         customRepository = "hive",
+        jdkVersion = 17,
     ),
     HiveTarballImage(
         id = "hive-4.2.0",
@@ -55,6 +57,7 @@ val images = listOf(
         hiveUrl = "https://dlcdn.apache.org/hive/hive-4.2.0/apache-hive-4.2.0-bin.tar.gz",
         vanillaRepository = "hive-vanilla",
         customRepository = "hive",
+        jdkVersion = 21,
     ),
     HiveTarballImage(
         id = "standalone-metastore-4.2.0",
@@ -64,6 +67,7 @@ val images = listOf(
         hiveUrl = "https://dlcdn.apache.org/hive/hive-standalone-metastore-4.2.0/hive-standalone-metastore-4.2.0-bin.tar.gz",
         vanillaRepository = "hive-standalone-metastore-vanilla",
         customRepository = "hive-standalone-metastore",
+        jdkVersion = 21,
     ),
 )
 
@@ -111,7 +115,8 @@ fun dockerTagSuffix(image: HiveTarballImage, custom: Boolean): String =
             append("-gcs-")
             append(gcsConnectorVersion)
         }
-        append("-jdk17")
+        append("-jdk")
+        append(image.jdkVersion)
     }
 
 fun dockerImage(image: HiveTarballImage, custom: Boolean): String {
@@ -192,7 +197,7 @@ fun vanillaDockerfile(image: HiveTarballImage): String {
               -C /opt; \
             tar -xzf /opt/$hiveTarball -C /opt
 
-        FROM eclipse-temurin:17-jre-jammy AS run
+        FROM eclipse-temurin:${image.jdkVersion}-jre-jammy AS run
         ARG UID=1000
         ARG HADOOP_VERSION=$hadoopVersion
         ARG HIVE_VERSION=${image.hiveVersion}
@@ -357,6 +362,7 @@ images.forEach { image ->
     )
     tasks.named("dockerPushCustom${image.taskSuffix}") {
         mustRunAfter("dockerPushVanilla${image.taskSuffix}")
+        mustRunAfter(":smoke-test:test")
     }
 }
 
@@ -385,5 +391,17 @@ tasks.register("dockerPushCustomHive4") {
 }
 
 tasks.register("dockerReleaseImages") {
+    dependsOn("dockerBuildCustomAll")
+    dependsOn(":smoke-test:test")
     dependsOn("dockerPushCustomAll")
+}
+
+tasks.named("dockerPushCustomAll") {
+    mustRunAfter(":smoke-test:test")
+}
+
+gradle.projectsEvaluated {
+    project(":smoke-test").tasks.named("test") {
+        mustRunAfter(":image:dockerBuildCustomAll")
+    }
 }
