@@ -175,6 +175,83 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
 
 The Hive 4 smoke client uses JDK 21 because Hive 4.2.0 client artifacts are Java 21 bytecode. The Hive 3 smoke client stays on Hive 3.1.3 dependencies and JDK 17.
 
+## Inspect Images
+
+Set the image tag you want to inspect:
+
+```bash
+IMAGE=ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+```
+
+Inspect image metadata and layers:
+
+```bash
+docker image inspect "$IMAGE"
+docker history --no-trunc "$IMAGE"
+```
+
+List every jar in the image:
+
+```bash
+docker run --rm --entrypoint bash "$IMAGE" -lc '
+  find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" | sort
+'
+```
+
+List installed Hive, Hadoop, and GCS jars:
+
+```bash
+docker run --rm --entrypoint bash "$IMAGE" -lc '
+  set -e
+  echo "Hadoop jars:"
+  find /opt/hadoop/share/hadoop -type f -name "*.jar" | sort
+  echo
+  echo "Hive jars:"
+  find /opt/hive -type f -name "*.jar" | sort
+  echo
+  echo "GCS jars:"
+  find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" \
+    | sort \
+    | grep -E "/(gcs-connector|gcsio|util-hadoop)-"
+'
+```
+
+Check the key versions in a custom image:
+
+```bash
+docker run --rm --entrypoint bash "$IMAGE" -lc '
+  set -e
+  java -version
+  /opt/hadoop/bin/hadoop version | head -n 2
+  test -x /opt/hive/bin/hive && /opt/hive/bin/hive --version | head -n 2 || true
+  find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" \
+    | sort \
+    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore)-"
+'
+```
+
+Compare vanilla and custom images to confirm that GCS jars are only in the custom layer:
+
+```bash
+VANILLA=ghcr.io/openprojectx/hive-vanilla:4.2.0-hadoop-3.4.2-jdk21
+CUSTOM=ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+
+for image in "$VANILLA" "$CUSTOM"; do
+  echo "== $image =="
+  docker run --rm --entrypoint bash "$image" -lc '
+    find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" \
+      | sort \
+      | grep -E "/(gcs-connector|gcsio|util-hadoop)-" || true
+  '
+done
+```
+
+For standalone HMS 4, set `IMAGE` to the HMS tag:
+
+```bash
+IMAGE=ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+```
+
 ## GitHub Workflows
 
 ### Vanilla Base Images
