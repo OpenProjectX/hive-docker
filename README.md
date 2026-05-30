@@ -137,11 +137,20 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
   -Psmoke.hms.image=ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
 ```
 
-To build the required vanilla and custom images locally before running the smoke test:
+To build the custom HMS image locally before running the smoke test:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
   -Psmoke.buildImage=true \
+  -PuseLocalTarballs=true
+```
+
+This uses the existing vanilla HMS base image from the local Docker cache or registry. Rebuild the vanilla HMS base only when needed:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
+  -Psmoke.buildImage=true \
+  -Psmoke.buildVanillaImage=true \
   -PuseLocalTarballs=true
 ```
 

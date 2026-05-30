@@ -69,13 +69,15 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-Build the local vanilla and custom images as part of the smoke test only when needed:
+Build the local custom HMS image as part of the smoke test only when needed:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
   -Psmoke.buildImage=true \
   -PuseLocalTarballs=true
 ```
+
+This expects the vanilla HMS base image to already exist locally or in the registry. Add `-Psmoke.buildVanillaImage=true` only when the vanilla HMS base must be rebuilt locally.
 
 The smoke test uses a Hive metastore client to connect to the custom standalone metastore container, create a database, and list it back through HMS. The client test JVM is JDK 21 because Hive 4.2.0 client jars are Java 21 bytecode.
 

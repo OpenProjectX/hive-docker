@@ -28,15 +28,18 @@ val smokeImage = providers.gradleProperty("smoke.hms.image")
 val buildImage = providers.gradleProperty("smoke.buildImage")
     .map(String::toBoolean)
     .orElse(false)
+val buildVanillaImage = providers.gradleProperty("smoke.buildVanillaImage")
+    .map(String::toBoolean)
+    .orElse(false)
 
 tasks.test {
     useJUnitPlatform()
 
     if (buildImage.get()) {
-        dependsOn(
-            ":image:dockerBuildVanillaStandaloneMetastore420",
-            ":image:dockerBuildCustomStandaloneMetastore420",
-        )
+        dependsOn(":image:dockerBuildCustomStandaloneMetastore420")
+    }
+    if (buildVanillaImage.get()) {
+        dependsOn(":image:dockerBuildVanillaStandaloneMetastore420")
     }
 
     environment("DOCKER_API_VERSION", System.getenv("DOCKER_API_VERSION") ?: "1.40")
