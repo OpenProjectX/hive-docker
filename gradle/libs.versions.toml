@@ -1,0 +1,48 @@
+# Version catalog is a central place for you to declare and version dependencies
+# https://docs.gradle.org/current/userguide/platforms.html#sub:version-catalog
+# https://docs.gradle.org/current/userguide/platforms.html#sub::toml-dependencies-format
+
+[versions]
+kotlin = "2.2.21"
+kotlinxDatetime = "0.7.1"
+kotlinxSerializationJSON = "1.9.0"
+kotlinxCoroutines = "1.10.2"
+hadoop = "3.4.2"
+gcsConnector = "4.0.4"
+
+
+[libraries]
+kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+
+kotlinxDatetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
+kotlinxSerialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJSON" }
+kotlinxCoroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+
+hadoopAws = { module = "org.apache.hadoop:hadoop-aws", version.ref = "hadoop" }
+hadoopCommon = { module = "org.apache.hadoop:hadoop-common", version.ref = "hadoop" }
+hadoopHdfsClient = { module = "org.apache.hadoop:hadoop-hdfs-client", version.ref = "hadoop" }
+hadoopMapreduceClientCore = { module = "org.apache.hadoop:hadoop-mapreduce-client-core", version.ref = "hadoop" }
+hadoopYarnApi = { module = "org.apache.hadoop:hadoop-yarn-api", version.ref = "hadoop" }
+hadoopYarnClient = { module = "org.apache.hadoop:hadoop-yarn-client", version.ref = "hadoop" }
+hadoopYarnCommon = { module = "org.apache.hadoop:hadoop-yarn-common", version.ref = "hadoop" }
+
+gcsConnector = { module = "com.google.cloud.bigdataoss:gcs-connector", version.ref = "gcsConnector" }
+gcsio = { module = "com.google.cloud.bigdataoss:gcsio", version.ref = "gcsConnector" }
+gcsUtilHadoop = { module = "com.google.cloud.bigdataoss:util-hadoop", version.ref = "gcsConnector" }
+
+# Libraries can be bundled together for easier import
+[bundles]
+kotlinxEcosystem = ["kotlinxDatetime", "kotlinxSerialization", "kotlinxCoroutines"]
+hadoopRuntime = [
+    "hadoopAws",
+    "hadoopCommon",
+    "hadoopHdfsClient",
+    "hadoopMapreduceClientCore",
+    "hadoopYarnApi",
+    "hadoopYarnClient",
+    "hadoopYarnCommon",
+]
+gcsRuntime = ["gcsConnector", "gcsio", "gcsUtilHadoop"]
+
+[plugins]
+kotlinPluginSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
