@@ -20,6 +20,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: custom-images-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[Gradle Release Plugin]') }}
