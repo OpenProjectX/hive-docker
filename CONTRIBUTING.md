@@ -93,7 +93,7 @@ sed -n '1,80p' image/build/docker/Hive420/Dockerfile.vanilla
 Inspect built image contents when changing dependency placement:
 
 ```bash
-IMAGE=ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+IMAGE=ghcr.io/openprojectx/hive:0.1.1-SNAPSHOT-3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17
 
 docker run --rm --entrypoint bash "$IMAGE" -lc '
   find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" | sort
