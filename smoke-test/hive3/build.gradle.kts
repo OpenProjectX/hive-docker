@@ -10,6 +10,7 @@ java {
 
 dependencies {
     testImplementation(libs.hiveMetastore3)
+    testImplementation(libs.hadoopMapreduceClientCore)
     testImplementation(libs.junitJupiter)
     testImplementation(libs.slf4jSimple)
     testImplementation(libs.testcontainersJunitJupiter)
