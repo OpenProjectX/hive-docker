@@ -9,6 +9,7 @@ This repository builds Docker images only. Do not add Maven Central, Sonatype, s
 - Keep vanilla image tags independent from the Gradle project release version.
 - Keep custom image tags tied to the Gradle release version.
 - Preserve the release-commit guard in workflows before enabling or changing push triggers.
+- Keep database drivers in custom images unless the project explicitly decides to make them part of vanilla.
 
 ## Local Setup
 
@@ -104,7 +105,15 @@ docker run --rm --entrypoint bash "$IMAGE" -lc '
   /opt/hadoop/bin/hadoop version | head -n 2
   find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" \
     | sort \
-    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore)-"
+    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore|postgresql)-"
+'
+```
+
+When changing PostgreSQL support, confirm the custom image contains the driver and the vanilla image does not:
+
+```bash
+docker run --rm --entrypoint bash "$IMAGE" -lc '
+  find /opt/hive/lib -type f -name "postgresql-*.jar" | sort
 '
 ```
 

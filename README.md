@@ -15,13 +15,14 @@ No Maven artifacts are published from this repository. Release means Docker imag
 | --- | --- | --- |
 | `hive-vanilla` | Base Hive image | `<hive>-hadoop-<hadoop>-jdk<jdk>` |
 | `hive-standalone-metastore-vanilla` | Base standalone HMS image | `<hive>-hadoop-<hadoop>-jdk<jdk>` |
-| `hive` | Custom Hive image with GCS libraries | `<project>-<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>` |
-| `hive-standalone-metastore` | Custom standalone HMS image with GCS libraries | `<project>-<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>` |
+| `hive` | Custom Hive image with GCS and PostgreSQL JDBC libraries | `<project>-<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>` |
+| `hive-standalone-metastore` | Custom standalone HMS image with GCS and PostgreSQL JDBC libraries | `<project>-<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>` |
 
 Current versions are managed in [gradle/libs.versions.toml](gradle/libs.versions.toml):
 
 - Hadoop: `3.4.2`
 - GCS connector: `4.0.4`
+- PostgreSQL JDBC: `42.7.4`
 - Hive: `3.1.3`, `4.2.0`
 - Standalone metastore: `4.2.0`
 - JDK: `17` for Hive 3.1.3, `21` for Hive 4.2.0/HMS 4.2.0
@@ -36,10 +37,11 @@ ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.
 
 ## Build Model
 
-Vanilla Dockerfiles install only the original Apache Hive/HMS and Hadoop distributions. Custom Dockerfiles use the vanilla image as `FROM` and copy GCS runtime jars into Hadoop's common library directory:
+Vanilla Dockerfiles install only the original Apache Hive/HMS and Hadoop distributions. Custom Dockerfiles use the vanilla image as `FROM`, copy GCS runtime jars into Hadoop's common library directory, and copy the PostgreSQL JDBC driver into Hive's library directory:
 
 ```text
 /opt/hadoop/share/hadoop/common/lib
+/opt/hive/lib
 ```
 
 The Dockerfile generator and image tasks live in [image/build.gradle.kts](image/build.gradle.kts).
@@ -175,6 +177,54 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
 
 The Hive 4 smoke client uses JDK 21 because Hive 4.2.0 client artifacts are Java 21 bytecode. The Hive 3 smoke client stays on Hive 3.1.3 dependencies and JDK 17.
 
+## PostgreSQL Metastore
+
+Custom images include the PostgreSQL JDBC driver in `/opt/hive/lib`. Vanilla images stay clean and do not include it.
+
+The metastore defaults to embedded Derby. Use PostgreSQL by setting `DB_DRIVER=postgres` and the PostgreSQL connection environment variables:
+
+```bash
+docker run --rm \
+  -e SERVICE_NAME=metastore \
+  -e DB_DRIVER=postgres \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DB=metastore \
+  -e POSTGRES_USER=hive \
+  -e POSTGRES_PASSWORD=hive \
+  ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+```
+
+For standalone HMS 4:
+
+```bash
+docker run --rm \
+  -e DB_DRIVER=postgres \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DB=metastore \
+  -e POSTGRES_USER=hive \
+  -e POSTGRES_PASSWORD=hive \
+  ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+```
+
+The entrypoint turns those variables into Hive metastore JDO settings:
+
+```text
+javax.jdo.option.ConnectionURL=jdbc:postgresql://<POSTGRES_HOST>:<POSTGRES_PORT>/<POSTGRES_DB>
+javax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+javax.jdo.option.ConnectionUserName=<POSTGRES_USER>
+javax.jdo.option.ConnectionPassword=<POSTGRES_PASSWORD>
+```
+
+Override the full JDBC URL directly when needed:
+
+```bash
+-e METASTORE_DB_CONNECTION_URL='jdbc:postgresql://postgres:5432/metastore?sslmode=require'
+```
+
+Schema initialization runs by default. Set `IS_RESUME=true` to skip schema initialization for an already-initialized metastore database.
+
 ## Inspect Images
 
 Set the image tag you want to inspect:
@@ -226,7 +276,7 @@ docker run --rm --entrypoint bash "$IMAGE" -lc '
   test -x /opt/hive/bin/hive && /opt/hive/bin/hive --version | head -n 2 || true
   find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" \
     | sort \
-    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore)-"
+    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore|postgresql)-"
 '
 ```
 

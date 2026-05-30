@@ -50,11 +50,44 @@ export TEZ_AM_REGISTRY_NAMESPACE="${TEZ_AM_REGISTRY_NAMESPACE:-/tez_am/server}"
 export TEZ_AM_ZOOKEEPER_QUORUM="${TEZ_AM_ZOOKEEPER_QUORUM:-${HIVE_ZOOKEEPER_QUORUM}}"
 
 envsubst < $HIVE_HOME/conf/core-site.xml.template > $HIVE_HOME/conf/core-site.xml
-envsubst < $HIVE_HOME/conf/hive-site.xml.template > $HIVE_HOME/conf/hive-site.xml
 envsubst < $HIVE_HOME/conf/tez-site.xml.template > $HIVE_HOME/conf/tez-site.xml
 # =========================================================================
 
 : "${DB_DRIVER:=derby}"
+: "${POSTGRES_HOST:=postgres}"
+: "${POSTGRES_PORT:=5432}"
+: "${POSTGRES_DB:=metastore}"
+: "${POSTGRES_USER:=hive}"
+: "${POSTGRES_PASSWORD:=hive}"
+
+case "$DB_DRIVER" in
+  postgres|postgresql)
+    DB_DRIVER="postgres"
+    : "${METASTORE_DB_CONNECTION_URL:=jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}}"
+    : "${METASTORE_DB_CONNECTION_DRIVER:=org.postgresql.Driver}"
+    : "${METASTORE_DB_CONNECTION_USER_NAME:=${POSTGRES_USER}}"
+    : "${METASTORE_DB_CONNECTION_PASSWORD:=${POSTGRES_PASSWORD}}"
+    ;;
+  derby)
+    : "${METASTORE_DB_CONNECTION_URL:=jdbc:derby:;databaseName=metastore_db;create=true}"
+    : "${METASTORE_DB_CONNECTION_DRIVER:=org.apache.derby.iapi.jdbc.AutoloadedDriver}"
+    : "${METASTORE_DB_CONNECTION_USER_NAME:=APP}"
+    : "${METASTORE_DB_CONNECTION_PASSWORD:=mine}"
+    ;;
+  *)
+    : "${METASTORE_DB_CONNECTION_URL:=}"
+    : "${METASTORE_DB_CONNECTION_DRIVER:=}"
+    : "${METASTORE_DB_CONNECTION_USER_NAME:=}"
+    : "${METASTORE_DB_CONNECTION_PASSWORD:=}"
+    ;;
+esac
+export DB_DRIVER
+export METASTORE_DB_CONNECTION_URL
+export METASTORE_DB_CONNECTION_DRIVER
+export METASTORE_DB_CONNECTION_USER_NAME
+export METASTORE_DB_CONNECTION_PASSWORD
+
+envsubst < $HIVE_HOME/conf/hive-site.xml.template > $HIVE_HOME/conf/hive-site.xml
 
 SKIP_SCHEMA_INIT="${IS_RESUME:-false}"
 [[ $VERBOSE = "true" ]] && VERBOSE_MODE="--verbose"

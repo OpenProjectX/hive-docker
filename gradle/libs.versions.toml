@@ -12,6 +12,7 @@ gcsConnector = "4.0.4"
 hive = "4.2.0"
 hive3 = "3.1.3"
 commonsCollections = "3.2.2"
+postgresql = "42.7.4"
 junitJupiter = "5.11.4"
 junitPlatform = "1.11.4"
 slf4j = "2.0.16"
@@ -37,6 +38,7 @@ gcsConnector = { module = "com.google.cloud.bigdataoss:gcs-connector", version.r
 gcsio = { module = "com.google.cloud.bigdataoss:gcsio", version.ref = "gcsConnector" }
 gcsUtilHadoop = { module = "com.google.cloud.bigdataoss:util-hadoop", version.ref = "gcsConnector" }
 commonsCollections = { module = "commons-collections:commons-collections", version.ref = "commonsCollections" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 
 hiveMetastore = { module = "org.apache.hive:hive-metastore", version.ref = "hive" }
 hiveMetastore3 = { module = "org.apache.hive:hive-metastore", version.ref = "hive3" }

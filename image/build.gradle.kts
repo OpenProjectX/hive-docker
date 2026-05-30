@@ -26,11 +26,26 @@ val hive3Runtime by configurations.creating {
     }
 }
 
+val databaseRuntime by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL))
+        attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, objects.named(TargetJvmEnvironment.STANDARD_JVM))
+    }
+}
+
 dependencies {
     gcsRuntime(libs.bundles.gcsRuntime) {
         exclude(group = "org.apache.hadoop")
     }
     hive3Runtime(libs.commonsCollections)
+    databaseRuntime(libs.postgresql) {
+        isTransitive = false
+    }
 }
 
 data class HiveTarballImage(
@@ -49,6 +64,7 @@ val useLocalTarballs = providers.gradleProperty("useLocalTarballs").map(String::
 val localTarballDir = providers.gradleProperty("localTarballDir").orElse("/home/coder/Downloads")
 val hadoopVersion = libs.versions.hadoop.get()
 val gcsConnectorVersion = libs.versions.gcsConnector.get()
+val postgresqlVersion = libs.versions.postgresql.get()
 val hadoopUrl = "https://archive.apache.org/dist/hadoop/core/hadoop-$hadoopVersion/hadoop-$hadoopVersion.tar.gz"
 
 val images = listOf(
@@ -104,6 +120,11 @@ val stageGcsDependencies by tasks.registering(Sync::class) {
 val stageHive3Dependencies by tasks.registering(Sync::class) {
     into(dockerRoot.map { it.dir("_shared/hive3-libs") })
     from(hive3Runtime)
+}
+
+val stageDatabaseDependencies by tasks.registering(Sync::class) {
+    into(dockerRoot.map { it.dir("_shared/database-libs") })
+    from(databaseRuntime)
 }
 
 fun artifactName(image: HiveTarballImage): String =
@@ -262,11 +283,14 @@ fun customDockerfile(image: HiveTarballImage): String {
 
         USER root
         COPY _shared/gcs-libs/ /tmp/gcs-libs/
+        COPY _shared/database-libs/ /tmp/database-libs/
         RUN set -eux; \
             mkdir -p /opt/hadoop/share/hadoop/common/lib; \
             cp /tmp/gcs-libs/*.jar /opt/hadoop/share/hadoop/common/lib/; \
+            cp /tmp/database-libs/*.jar /opt/hive/lib/; \
             rm -rf /tmp/gcs-libs; \
-            chown -R hive:hive /opt/hadoop
+            rm -rf /tmp/database-libs; \
+            chown -R hive:hive /opt/hadoop /opt/hive
         $hive3Compatibility
         USER hive
     """.cleanDockerfile()
@@ -279,6 +303,7 @@ val generateDockerfiles by tasks.registering {
     inputs.property("artifactVersion", provider { project.version.toString() })
     inputs.property("hadoopVersion", hadoopVersion)
     inputs.property("gcsConnectorVersion", gcsConnectorVersion)
+    inputs.property("postgresqlVersion", postgresqlVersion)
 
     doLast {
         val root = dockerRoot.get().asFile
@@ -377,9 +402,9 @@ images.forEach { image ->
         needsTarballs = false,
         cacheScope = "custom-${image.taskSuffix}",
         extraDependsOn = if (image.hiveVersion == "3.1.3") {
-            listOf(stageGcsDependencies, stageHive3Dependencies)
+            listOf(stageGcsDependencies, stageDatabaseDependencies, stageHive3Dependencies)
         } else {
-            stageGcsDependencies
+            listOf(stageGcsDependencies, stageDatabaseDependencies)
         },
     )
     tasks.named(customBuildTask) {
