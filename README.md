@@ -112,7 +112,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-This task builds the custom images, runs the standalone HMS smoke test against the just-built local custom HMS image tag, and only then pushes the custom images.
+This task builds the custom images, runs smoke tests against the just-built local custom image tags, and only then pushes the custom images.
 
 Run the image-only release task:
 
@@ -124,20 +124,39 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-Run the standalone HMS smoke test:
+Run the smoke tests:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest
 ```
 
-By default, the smoke test uses the expected custom standalone metastore image from `ghcr.io/openprojectx`. To test a specific image:
+By default, the smoke tests cover these custom image subjects:
+
+```text
+hive3
+hive4
+hive-standalone-metastore-4
+```
+
+The smoke tests are split by client version. `:smoke-test:hive3` uses Hive 3.1.3 client dependencies against the Hive 3 image. `:smoke-test:hive4` uses Hive 4.2.0 client dependencies against both the Hive 4 image and the standalone HMS 4 image.
+
+To run one subject:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
-  -Psmoke.hms.image=ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+  -Psmoke.subjects=hive-standalone-metastore-4
 ```
 
-To build the custom HMS image locally before running the smoke test:
+To test specific image tags:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
+  -Psmoke.image.hive-standalone-metastore-4=ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21 \
+  -Psmoke.image.hive4=ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21 \
+  -Psmoke.image.hive3=ghcr.io/openprojectx/hive:0.1.0-3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17
+```
+
+To build the selected custom images locally before running the smoke test:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
@@ -145,7 +164,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
   -PuseLocalTarballs=true
 ```
 
-This uses the existing vanilla HMS base image from the local Docker cache or registry. Rebuild the vanilla HMS base only when needed:
+This uses existing vanilla base images from the local Docker cache or registry. Rebuild the selected vanilla bases only when needed:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
@@ -154,7 +173,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
   -PuseLocalTarballs=true
 ```
 
-The smoke client uses JDK 21 because Hive 4.2.0 client artifacts are Java 21 bytecode.
+The Hive 4 smoke client uses JDK 21 because Hive 4.2.0 client artifacts are Java 21 bytecode. The Hive 3 smoke client stays on Hive 3.1.3 dependencies and JDK 17.
 
 ## GitHub Workflows
 
@@ -172,13 +191,15 @@ The workflow caches Apache Hive/HMS and Hadoop release tarballs under `.cache/ap
 
 Runs on pushes to `master` and can also be triggered manually. It runs the Gradle `release` task and publishes custom images only.
 
-The release task validates the custom standalone metastore image before publishing it. The smoke test image defaults to:
+The release task validates the default smoke subjects before publishing custom images:
 
 ```text
 <imageRegistry>/hive-standalone-metastore:<project>-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+<imageRegistry>/hive:<project>-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+<imageRegistry>/hive:<project>-3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17
 ```
 
-That is the same tag produced by the current custom image build in the workflow.
+Those are the same tags produced by the current custom image build in the workflow.
 
 Gradle release commits are skipped to avoid workflow loops:
 

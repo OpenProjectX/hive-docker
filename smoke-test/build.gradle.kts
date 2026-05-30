@@ -1,54 +1,26 @@
 plugins {
-    java
+    base
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
-    }
-}
-
-dependencies {
-    testImplementation(libs.hiveMetastore)
-    testImplementation(libs.junitJupiter)
-    testImplementation(libs.slf4jSimple)
-    testImplementation(libs.testcontainersJunitJupiter)
-    testRuntimeOnly(libs.junitPlatformLauncher)
-}
-
-val imageRegistry = providers.gradleProperty("imageRegistry").orElse("ghcr.io/openprojectx")
-val smokeImage = providers.gradleProperty("smoke.hms.image")
-    .orElse(
-        provider {
-            "${imageRegistry.get()}/hive-standalone-metastore:" +
-                "${project.version}-${libs.versions.hive.get()}-hadoop-${libs.versions.hadoop.get()}" +
-                "-gcs-${libs.versions.gcsConnector.get()}-jdk21"
-        }
-    )
-val buildImage = providers.gradleProperty("smoke.buildImage")
-    .map(String::toBoolean)
-    .orElse(false)
-val buildVanillaImage = providers.gradleProperty("smoke.buildVanillaImage")
-    .map(String::toBoolean)
-    .orElse(false)
-
-tasks.test {
-    useJUnitPlatform()
-
-    if (buildImage.get()) {
-        dependsOn(":image:dockerBuildCustomStandaloneMetastore420")
-    }
-    if (buildVanillaImage.get()) {
-        dependsOn(":image:dockerBuildVanillaStandaloneMetastore420")
+val knownSmokeSubjects = setOf("hive3", "hive4", "hive-standalone-metastore-4")
+val enabledSmokeSubjects = providers.gradleProperty("smoke.subjects")
+    .orElse(knownSmokeSubjects.joinToString(","))
+    .map { value ->
+        value.split(",")
+            .map(String::trim)
+            .filter(String::isNotEmpty)
     }
 
-    environment("DOCKER_API_VERSION", System.getenv("DOCKER_API_VERSION") ?: "1.40")
-    systemProperty("api.version", System.getenv("DOCKER_API_VERSION") ?: "1.40")
-    systemProperty("smoke.hms.image", smokeImage.get())
+tasks.register("test") {
     doFirst {
-        logger.lifecycle("Running HMS smoke test against {}", smokeImage.get())
+        val unknownSubjects = enabledSmokeSubjects.get().filter { it !in knownSmokeSubjects }
+        check(unknownSubjects.isEmpty()) {
+            "Unknown smoke subjects: ${unknownSubjects.joinToString(", ")}"
+        }
     }
-    testLogging {
-        events("passed", "skipped", "failed")
-    }
+    dependsOn(":smoke-test:hive3:test", ":smoke-test:hive4:test")
+}
+
+tasks.register("testClasses") {
+    dependsOn(":smoke-test:hive3:testClasses", ":smoke-test:hive4:testClasses")
 }

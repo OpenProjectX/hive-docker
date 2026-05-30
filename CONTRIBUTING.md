@@ -55,13 +55,15 @@ Compile the smoke test client:
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:testClasses
 ```
 
-Run the full smoke test when a custom HMS image is available or can be built locally:
+Run the full smoke test when custom images are available or can be built locally:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest
 ```
 
-The custom image release task builds the custom images first, runs the smoke test against the same local custom standalone metastore tag, then pushes images:
+The default smoke subjects are `hive3`, `hive4`, and `hive-standalone-metastore-4`. Limit the run with `-Psmoke.subjects=hive-standalone-metastore-4` or override image tags with `-Psmoke.image.<subject>=...`.
+
+The custom image release task builds the custom images first, runs the smoke tests against the same local custom image tags, then pushes images:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
@@ -69,7 +71,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-Build the local custom HMS image as part of the smoke test only when needed:
+Build the selected local custom images as part of the smoke test only when needed:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
@@ -77,9 +79,9 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
   -PuseLocalTarballs=true
 ```
 
-This expects the vanilla HMS base image to already exist locally or in the registry. Add `-Psmoke.buildVanillaImage=true` only when the vanilla HMS base must be rebuilt locally.
+This expects the selected vanilla base images to already exist locally or in the registry. Add `-Psmoke.buildVanillaImage=true` only when the selected vanilla bases must be rebuilt locally.
 
-The smoke test uses a Hive metastore client to connect to the custom standalone metastore container, create a database, and list it back through HMS. The client test JVM is JDK 21 because Hive 4.2.0 client jars are Java 21 bytecode.
+The smoke test uses a Hive metastore client to connect to each subject container and list databases through HMS. Client dependencies are isolated by Gradle subproject: `:smoke-test:hive3` uses the Hive 3.1.3 client on JDK 17, and `:smoke-test:hive4` uses the Hive 4.2.0 client on JDK 21 for both Hive 4 and standalone HMS 4 subjects.
 
 For workflow or tag changes, inspect generated Dockerfiles:
 

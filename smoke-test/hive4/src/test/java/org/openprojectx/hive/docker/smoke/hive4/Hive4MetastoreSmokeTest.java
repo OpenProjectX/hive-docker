@@ -1,0 +1,99 @@
+package org.openprojectx.hive.docker.smoke.hive4;
+
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
+import org.apache.hadoop.hive.metastore.api.Database;
+import org.apache.thrift.TException;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class Hive4MetastoreSmokeTest {
+    private static final int METASTORE_PORT = 9083;
+
+    static Stream<Subject> hive4Subjects() {
+        String subjects = System.getProperty("smoke.hive4.subjects", "");
+        return Arrays.stream(subjects.split(","))
+            .map(String::trim)
+            .filter(subject -> !subject.isEmpty())
+            .map(subject -> new Subject(
+                subject,
+                System.getProperty("smoke.hive4." + subject + ".image"),
+                environment(subject)
+            ));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("hive4Subjects")
+    void hive4ImageAcceptsHive4MetastoreClientRequests(Subject subject) throws Exception {
+        try (GenericContainer<?> metastore = metastoreContainer(subject)) {
+            metastore.start();
+
+            HiveConf conf = new HiveConf();
+            conf.setVar(HiveConf.ConfVars.METASTORE_URIS, thriftUri(metastore));
+            conf.setBoolVar(HiveConf.ConfVars.METASTORE_CLIENT_CACHE_ENABLED, false);
+
+            try (HiveMetaStoreClient client = new HiveMetaStoreClient(conf)) {
+                Database database = new Database();
+                database.setName("smoke_" + subject.id().replace('-', '_'));
+                database.setDescription("Created by hive-docker Hive 4 smoke test for " + subject.id());
+                database.setLocationUri("file:/tmp/hive-smoke/" + database.getName() + ".db");
+
+                createDatabaseIfMissing(client, database);
+
+                List<String> databases = client.getDatabases("smoke_*");
+                assertTrue(databases.contains(database.getName()), subject.id() + " should return " + database.getName());
+            }
+        }
+    }
+
+    private GenericContainer<?> metastoreContainer(Subject subject) {
+        return new GenericContainer<>(DockerImageName.parse(subject.image()))
+            .withExposedPorts(METASTORE_PORT)
+            .withEnv(subject.environment())
+            .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofMinutes(3)));
+    }
+
+    private String thriftUri(GenericContainer<?> metastore) {
+        return "thrift://" + metastore.getHost() + ":" + metastore.getMappedPort(METASTORE_PORT);
+    }
+
+    private void createDatabaseIfMissing(HiveMetaStoreClient client, Database database) throws TException {
+        if (!client.getDatabases(database.getName()).contains(database.getName())) {
+            client.createDatabase(database);
+        }
+    }
+
+    private static Map<String, String> environment(String subject) {
+        String raw = System.getProperty("smoke.hive4." + subject + ".environment", "");
+        Map<String, String> environment = new LinkedHashMap<>();
+        if (raw.isBlank()) {
+            return environment;
+        }
+        for (String entry : raw.split(",")) {
+            String[] parts = entry.split("=", 2);
+            if (parts.length == 2 && !parts[0].isBlank()) {
+                environment.put(parts[0], parts[1]);
+            }
+        }
+        return environment;
+    }
+
+    record Subject(String id, String image, Map<String, String> environment) {
+        @Override
+        public String toString() {
+            return id;
+        }
+    }
+}

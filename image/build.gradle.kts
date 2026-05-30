@@ -14,10 +14,23 @@ val gcsRuntime by configurations.creating {
     }
 }
 
+val hive3Runtime by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL))
+        attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, objects.named(TargetJvmEnvironment.STANDARD_JVM))
+    }
+}
+
 dependencies {
     gcsRuntime(libs.bundles.gcsRuntime) {
         exclude(group = "org.apache.hadoop")
     }
+    hive3Runtime(libs.commonsCollections)
 }
 
 data class HiveTarballImage(
@@ -86,6 +99,11 @@ val stageLocalTarballs by tasks.registering(Copy::class) {
 val stageGcsDependencies by tasks.registering(Sync::class) {
     into(dockerRoot.map { it.dir("_shared/gcs-libs") })
     from(gcsRuntime)
+}
+
+val stageHive3Dependencies by tasks.registering(Sync::class) {
+    into(dockerRoot.map { it.dir("_shared/hive3-libs") })
+    from(hive3Runtime)
 }
 
 fun artifactName(image: HiveTarballImage): String =
@@ -227,8 +245,19 @@ fun vanillaDockerfile(image: HiveTarballImage): String {
     """.cleanDockerfile()
 }
 
-fun customDockerfile(image: HiveTarballImage): String =
-    """
+fun customDockerfile(image: HiveTarballImage): String {
+    val hive3Compatibility = if (image.hiveVersion == "3.1.3") {
+        """
+            COPY _shared/hive3-libs/ /tmp/hive3-libs/
+            RUN set -eux; \
+                cp /tmp/hive3-libs/*.jar /opt/hive/lib/; \
+                rm -rf /tmp/hive3-libs; \
+                chown -R hive:hive /opt/hive
+        """.trimIndent()
+    } else {
+        ""
+    }
+    return """
         FROM ${dockerImage(image, custom = false)}
 
         USER root
@@ -238,8 +267,10 @@ fun customDockerfile(image: HiveTarballImage): String =
             cp /tmp/gcs-libs/*.jar /opt/hadoop/share/hadoop/common/lib/; \
             rm -rf /tmp/gcs-libs; \
             chown -R hive:hive /opt/hadoop
+        $hive3Compatibility
         USER hive
     """.cleanDockerfile()
+}
 
 val generateDockerfiles by tasks.registering {
     outputs.dir(dockerRoot)
@@ -345,7 +376,11 @@ images.forEach { image ->
         imageTag = provider { dockerImage(image, custom = true) },
         needsTarballs = false,
         cacheScope = "custom-${image.taskSuffix}",
-        extraDependsOn = stageGcsDependencies,
+        extraDependsOn = if (image.hiveVersion == "3.1.3") {
+            listOf(stageGcsDependencies, stageHive3Dependencies)
+        } else {
+            stageGcsDependencies
+        },
     )
     tasks.named(customBuildTask) {
         mustRunAfter(vanillaBuildTask)
