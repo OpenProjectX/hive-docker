@@ -37,6 +37,34 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Cache Apache release tarballs
+        uses: actions/cache@v4
+        with:
+          path: .cache/apache-tarballs
+          key: apache-tarballs-hadoop-3.4.2-hive-3.1.3-4.2.0-metastore-4.2.0
+
+      - name: Download Apache release tarballs
+        run: |
+          set -eux
+          mkdir -p .cache/apache-tarballs
+
+          download() {
+            url="$1"
+            file=".cache/apache-tarballs/$2"
+            if [ ! -s "$file" ]; then
+              curl -fL --retry 5 --retry-delay 5 "$url" -o "$file"
+            fi
+          }
+
+          download "https://archive.apache.org/dist/hadoop/core/hadoop-3.4.2/hadoop-3.4.2.tar.gz" \
+            "hadoop-3.4.2.tar.gz"
+          download "https://archive.apache.org/dist/hive/hive-3.1.3/apache-hive-3.1.3-bin.tar.gz" \
+            "apache-hive-3.1.3-bin.tar.gz"
+          download "https://dlcdn.apache.org/hive/hive-4.2.0/apache-hive-4.2.0-bin.tar.gz" \
+            "apache-hive-4.2.0-bin.tar.gz"
+          download "https://dlcdn.apache.org/hive/hive-standalone-metastore-4.2.0/hive-standalone-metastore-4.2.0-bin.tar.gz" \
+            "hive-standalone-metastore-4.2.0-bin.tar.gz"
+
       - name: Login to GHCR
         if: ${{ startsWith(inputs.image_registry, 'ghcr.io/') }}
         uses: docker/login-action@v3
@@ -55,4 +83,7 @@ jobs:
             standalone-metastore-4.2.0) task=":image:dockerPushVanillaStandaloneMetastore420" ;;
             *) echo "Unknown image: ${{ inputs.image }}" >&2; exit 1 ;;
           esac
-          ./gradlew --no-configuration-cache "$task" -PimageRegistry="${{ inputs.image_registry }}"
+          ./gradlew --no-configuration-cache "$task" \
+            -PimageRegistry="${{ inputs.image_registry }}" \
+            -PuseLocalTarballs=true \
+            -PlocalTarballDir="$PWD/.cache/apache-tarballs"

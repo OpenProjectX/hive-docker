@@ -164,6 +164,8 @@ The smoke client uses JDK 21 because Hive 4.2.0 client artifacts are Java 21 byt
 
 Manual only. It builds and publishes vanilla base images. Use it when Hive, Hadoop, JDK, or base image construction changes.
 
+The workflow caches Apache Hive/HMS and Hadoop release tarballs under `.cache/apache-tarballs`, downloads only missing files, and builds with `-PuseLocalTarballs=true`. Vanilla Dockerfiles therefore copy tarballs from the workflow workspace instead of downloading large archives inside Docker builds.
+
 ### Custom Images
 
 [.github/workflows/custom-images.yml](.github/workflows/custom-images.yml)

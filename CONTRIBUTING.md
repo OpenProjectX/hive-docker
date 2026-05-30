@@ -99,6 +99,8 @@ hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
 
 Vanilla base images are published manually from the **Vanilla Base Images** workflow.
 
+That workflow restores `.cache/apache-tarballs` from GitHub Actions cache, downloads any missing Hive/HMS/Hadoop tarballs, then passes `-PuseLocalTarballs=true` and `-PlocalTarballDir` to Gradle. Keep that path stable so repeated manual vanilla builds reuse cached tarballs.
+
 Custom images are released by the **Custom Images** workflow. On push to `master`, the workflow derives:
 
 - `release_version` from `gradle.properties` by removing `-SNAPSHOT`
