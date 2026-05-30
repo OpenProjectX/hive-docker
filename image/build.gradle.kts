@@ -270,6 +270,7 @@ fun registerDockerBuildTask(
     dockerfileName: String,
     imageTag: Provider<String>,
     needsTarballs: Boolean,
+    cacheScope: String,
     extraDependsOn: Any? = null,
 ) {
     tasks.register<Exec>(name) {
@@ -281,15 +282,34 @@ fun registerDockerBuildTask(
             dependsOn(extraDependsOn)
         }
         workingDir = dockerRoot.get().asFile
-        commandLine(
-            "docker",
-            "build",
-            "-f",
-            dockerRoot.get().file(dockerfileName).asFile.absolutePath,
-            "-t",
-            imageTag.get(),
-            ".",
-        )
+        val dockerfile = dockerRoot.get().file(dockerfileName).asFile.absolutePath
+        if (System.getenv("GITHUB_ACTIONS").equals("true", ignoreCase = true)) {
+            commandLine(
+                "docker",
+                "buildx",
+                "build",
+                "--load",
+                "--cache-from",
+                "type=gha,scope=$cacheScope",
+                "--cache-to",
+                "type=gha,mode=max,scope=$cacheScope",
+                "-f",
+                dockerfile,
+                "-t",
+                imageTag.get(),
+                ".",
+            )
+        } else {
+            commandLine(
+                "docker",
+                "build",
+                "-f",
+                dockerfile,
+                "-t",
+                imageTag.get(),
+                ".",
+            )
+        }
     }
 }
 
@@ -312,12 +332,14 @@ images.forEach { image ->
         dockerfileName = "${image.taskSuffix}/Dockerfile.vanilla",
         imageTag = provider { dockerImage(image, custom = false) },
         needsTarballs = true,
+        cacheScope = "vanilla-${image.taskSuffix}",
     )
     registerDockerBuildTask(
         name = customBuildTask,
         dockerfileName = "${image.taskSuffix}/Dockerfile.custom",
         imageTag = provider { dockerImage(image, custom = true) },
         needsTarballs = false,
+        cacheScope = "custom-${image.taskSuffix}",
         extraDependsOn = stageGcsDependencies,
     )
     tasks.named(customBuildTask) {

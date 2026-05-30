@@ -33,6 +33,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       - uses: docker/setup-buildx-action@v3
 
