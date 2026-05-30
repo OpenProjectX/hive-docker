@@ -126,7 +126,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-Run the smoke tests:
+Run the smoke tests against image tags that already exist locally or in the registry:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest
@@ -142,11 +142,29 @@ hive-standalone-metastore-4
 
 The smoke tests are split by client version. `:smoke-test:hive3` uses Hive 3.1.3 client dependencies against the Hive 3 image. `:smoke-test:hive4` uses Hive 4.2.0 client dependencies against both the Hive 4 image and the standalone HMS 4 image.
 
-To run one subject:
+The default image tag includes the current Gradle project version from `gradle.properties`. If that exact tag has not been built or published, Testcontainers will fail while pulling the image. For local development, either build the current custom image first or override the image tag to one that exists.
+
+To run one subject against an existing default tag:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
   -Psmoke.subjects=hive-standalone-metastore-4
+```
+
+Subject-specific commands:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
+  -Psmoke.subjects=hive3 \
+  -PimageRegistry=ghcr.io/openprojectx
+
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \
+  -Psmoke.subjects=hive4 \
+  -PimageRegistry=ghcr.io/openprojectx
+
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \
+  -Psmoke.subjects=hive-standalone-metastore-4 \
+  -PimageRegistry=ghcr.io/openprojectx
 ```
 
 To test specific image tags:
@@ -158,12 +176,21 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
   -Psmoke.image.hive3=ghcr.io/openprojectx/hive:0.1.0-3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17
 ```
 
-To build the selected custom images locally before running the smoke test:
+To build the selected custom images locally before running the smoke test, use `-Psmoke.buildImage=true`. This is the normal local command when the current project version tag has not been published yet:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
   -Psmoke.buildImage=true \
   -PuseLocalTarballs=true
+```
+
+For only Hive 3:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
+  -Psmoke.subjects=hive3 \
+  -Psmoke.buildImage=true \
+  -PimageRegistry=ghcr.io/openprojectx
 ```
 
 This uses existing vanilla base images from the local Docker cache or registry. Rebuild the selected vanilla bases only when needed:
@@ -176,6 +203,8 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest 
 ```
 
 The Hive 4 smoke client uses JDK 21 because Hive 4.2.0 client artifacts are Java 21 bytecode. The Hive 3 smoke client stays on Hive 3.1.3 dependencies and JDK 17.
+
+Add `-Dsmoke.containerLogs=true` to any smoke command when debugging container startup.
 
 ## PostgreSQL Metastore
 
@@ -227,7 +256,14 @@ Schema initialization runs by default. Set `IS_RESUME=true` to skip schema initi
 
 For external databases, the custom entrypoint passes the JDBC URL, driver, username, and password directly to `schematool`, so first startup initializes or upgrades the schema against the configured database instead of falling back to Derby.
 
-The Hive 4 smoke tests cover this path with Testcontainers and `postgres:16`:
+The Hive 3 and Hive 4 smoke tests cover this path with Testcontainers and `postgres:16`:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
+  --tests 'org.openprojectx.hive.docker.smoke.hive3.Hive3MetastoreSmokeTest.hive3ImageInitializesPostgresSchemaAndAcceptsHive3MetastoreClientRequests' \
+  -Psmoke.subjects=hive3 \
+  -PimageRegistry=ghcr.io/openprojectx
+```
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \

@@ -60,7 +60,11 @@ case "$DB_DRIVER" in
     ;;
   derby)
     : "${METASTORE_DB_CONNECTION_URL:=jdbc:derby:;databaseName=metastore_db;create=true}"
-    : "${METASTORE_DB_CONNECTION_DRIVER:=org.apache.derby.iapi.jdbc.AutoloadedDriver}"
+    if [ "$(echo "$HIVE_VER" | cut -d '.' -f1)" -lt "4" ]; then
+      : "${METASTORE_DB_CONNECTION_DRIVER:=org.apache.derby.jdbc.EmbeddedDriver}"
+    else
+      : "${METASTORE_DB_CONNECTION_DRIVER:=org.apache.derby.iapi.jdbc.AutoloadedDriver}"
+    fi
     : "${METASTORE_DB_CONNECTION_USER_NAME:=APP}"
     : "${METASTORE_DB_CONNECTION_PASSWORD:=mine}"
     ;;

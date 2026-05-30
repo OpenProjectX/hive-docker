@@ -56,13 +56,29 @@ Compile the smoke test client:
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:testClasses
 ```
 
-Run the full smoke test when custom images are available or can be built locally:
+Run the full smoke test when the current custom image tags already exist locally or in the registry:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest
 ```
 
 The default smoke subjects are `hive3`, `hive4`, and `hive-standalone-metastore-4`. Limit the run with `-Psmoke.subjects=hive-standalone-metastore-4` or override image tags with `-Psmoke.image.<subject>=...`.
+
+The default image tag includes the current Gradle project version. If that tag has not been built or published yet, build it locally during the test:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
+  -Psmoke.subjects=hive3 \
+  -Psmoke.buildImage=true \
+  -PimageRegistry=ghcr.io/openprojectx
+
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \
+  -Psmoke.subjects=hive4,hive-standalone-metastore-4 \
+  -Psmoke.buildImage=true \
+  -PimageRegistry=ghcr.io/openprojectx
+```
+
+Use `-Dsmoke.containerLogs=true` on any smoke command when debugging container startup.
 
 The custom image release task builds the custom images first, runs the smoke tests against the same local custom image tags, then pushes images:
 
@@ -117,10 +133,18 @@ docker run --rm --entrypoint bash "$IMAGE" -lc '
 '
 ```
 
-Also run the PostgreSQL-backed HMS smoke test after rebuilding the custom image:
+Also run the PostgreSQL-backed HMS smoke tests after rebuilding the custom images:
 
 ```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :image:dockerBuildCustomHive313 \
+  -PimageRegistry=ghcr.io/openprojectx
+
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :image:dockerBuildCustomStandaloneMetastore420 \
+  -PimageRegistry=ghcr.io/openprojectx
+
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
+  --tests 'org.openprojectx.hive.docker.smoke.hive3.Hive3MetastoreSmokeTest.hive3ImageInitializesPostgresSchemaAndAcceptsHive3MetastoreClientRequests' \
+  -Psmoke.subjects=hive3 \
   -PimageRegistry=ghcr.io/openprojectx
 
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \

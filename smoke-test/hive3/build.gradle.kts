@@ -14,6 +14,7 @@ dependencies {
     testImplementation(libs.junitJupiter)
     testImplementation(libs.slf4jSimple)
     testImplementation(libs.testcontainersJunitJupiter)
+    testImplementation(libs.testcontainersPostgresql)
     testRuntimeOnly(libs.junitPlatformLauncher)
 }
 
@@ -51,6 +52,7 @@ tasks.test {
     environment("DOCKER_API_VERSION", System.getenv("DOCKER_API_VERSION") ?: "1.40")
     systemProperty("api.version", System.getenv("DOCKER_API_VERSION") ?: "1.40")
     systemProperty("smoke.hive3.image", image.get())
+    systemProperty("smoke.containerLogs", providers.systemProperty("smoke.containerLogs").orElse("false").get())
     doFirst {
         logger.lifecycle("Running {} smoke test with Hive 3 client against {}", subjectId, image.get())
     }

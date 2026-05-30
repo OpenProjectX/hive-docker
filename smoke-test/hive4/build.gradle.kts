@@ -77,6 +77,7 @@ tasks.test {
 
     environment("DOCKER_API_VERSION", System.getenv("DOCKER_API_VERSION") ?: "1.40")
     systemProperty("api.version", System.getenv("DOCKER_API_VERSION") ?: "1.40")
+    systemProperty("smoke.containerLogs", providers.systemProperty("smoke.containerLogs").orElse("false").get())
     systemProperty("smoke.hive4.subjects", selectedSubjects.get().joinToString(",") { it.id })
     selectedSubjects.get().forEach { subject ->
         systemProperty("smoke.hive4.${subject.id}.image", subject.image.get())
