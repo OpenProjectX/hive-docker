@@ -225,6 +225,20 @@ Override the full JDBC URL directly when needed:
 
 Schema initialization runs by default. Set `IS_RESUME=true` to skip schema initialization for an already-initialized metastore database.
 
+For external databases, the custom entrypoint passes the JDBC URL, driver, username, and password directly to `schematool`, so first startup initializes or upgrades the schema against the configured database instead of falling back to Derby.
+
+The Hive 4 smoke tests cover this path with Testcontainers and `postgres:16`:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \
+  -Psmoke.subjects=hive-standalone-metastore-4 \
+  -PimageRegistry=ghcr.io/openprojectx
+```
+
+Add `-Dsmoke.containerLogs=true` when debugging container startup.
+
+For production, use a managed or persistent PostgreSQL database, pass credentials through your runtime secret mechanism, and keep `IS_RESUME=false` only for first deploys or planned schema upgrades. After the schema exists, set `IS_RESUME=true` for normal restarts.
+
 ## Inspect Images
 
 Set the image tag you want to inspect:

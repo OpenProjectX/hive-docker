@@ -117,6 +117,20 @@ docker run --rm --entrypoint bash "$IMAGE" -lc '
 '
 ```
 
+Also run the PostgreSQL-backed HMS smoke test after rebuilding the custom image:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :image:dockerBuildCustomStandaloneMetastore420 \
+  -PimageRegistry=ghcr.io/openprojectx
+
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \
+  --tests 'org.openprojectx.hive.docker.smoke.hive4.Hive4MetastoreSmokeTest.hive4ImageInitializesPostgresSchemaAndAcceptsHiveMetastoreClientRequests' \
+  -Psmoke.subjects=hive-standalone-metastore-4 \
+  -PimageRegistry=ghcr.io/openprojectx
+```
+
+Set `-Dsmoke.containerLogs=true` on the test command when you need the HMS container logs in the Gradle output.
+
 Expected tag behavior:
 
 ```text

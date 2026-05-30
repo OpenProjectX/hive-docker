@@ -13,6 +13,7 @@ dependencies {
     testImplementation(libs.junitJupiter)
     testImplementation(libs.slf4jSimple)
     testImplementation(libs.testcontainersJunitJupiter)
+    testImplementation(libs.testcontainersPostgresql)
     testRuntimeOnly(libs.junitPlatformLauncher)
 }
 

@@ -267,6 +267,7 @@ fun vanillaDockerfile(image: HiveTarballImage): String {
 }
 
 fun customDockerfile(image: HiveTarballImage): String {
+    val packagingDir = if (image.kind == "standalone-metastore") "standalone-metastore" else "full"
     val hive3Compatibility = if (image.hiveVersion == "3.1.3") {
         """
             COPY _shared/hive3-libs/ /tmp/hive3-libs/
@@ -282,9 +283,12 @@ fun customDockerfile(image: HiveTarballImage): String {
         FROM ${dockerImage(image, custom = false)}
 
         USER root
+        COPY --chown=hive:hive $packagingDir/entrypoint.sh /entrypoint.sh
+        COPY --chown=hive:hive $packagingDir/conf ${'$'}HIVE_HOME/conf
         COPY _shared/gcs-libs/ /tmp/gcs-libs/
         COPY _shared/database-libs/ /tmp/database-libs/
         RUN set -eux; \
+            chmod +x /entrypoint.sh; \
             mkdir -p /opt/hadoop/share/hadoop/common/lib; \
             cp /tmp/gcs-libs/*.jar /opt/hadoop/share/hadoop/common/lib/; \
             cp /tmp/database-libs/*.jar /opt/hive/lib/; \

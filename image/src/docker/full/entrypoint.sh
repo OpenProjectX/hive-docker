@@ -97,11 +97,23 @@ function initialize_hive {
   if [ "$(echo "$HIVE_VER" | cut -d '.' -f1)" -lt "4" ]; then
      COMMAND="-${SCHEMA_COMMAND:-initSchema}"
   fi
-  if [[ -n "$VERBOSE_MODE" ]]; then
-    "$HIVE_HOME/bin/schematool" -dbType "$DB_DRIVER" "$COMMAND" "$VERBOSE_MODE"
-  else
-    "$HIVE_HOME/bin/schematool" -dbType "$DB_DRIVER" "$COMMAND"
+  SCHEMA_ARGS=(-dbType "$DB_DRIVER" "$COMMAND")
+  if [ -n "$METASTORE_DB_CONNECTION_URL" ]; then
+    SCHEMA_ARGS+=(-url "$METASTORE_DB_CONNECTION_URL")
   fi
+  if [ -n "$METASTORE_DB_CONNECTION_DRIVER" ]; then
+    SCHEMA_ARGS+=(-driver "$METASTORE_DB_CONNECTION_DRIVER")
+  fi
+  if [ -n "$METASTORE_DB_CONNECTION_USER_NAME" ]; then
+    SCHEMA_ARGS+=(-userName "$METASTORE_DB_CONNECTION_USER_NAME")
+  fi
+  if [ -n "$METASTORE_DB_CONNECTION_PASSWORD" ]; then
+    SCHEMA_ARGS+=(-passWord "$METASTORE_DB_CONNECTION_PASSWORD")
+  fi
+  if [ -n "$VERBOSE_MODE" ]; then
+    SCHEMA_ARGS+=("$VERBOSE_MODE")
+  fi
+  "$HIVE_HOME/bin/schematool" "${SCHEMA_ARGS[@]}"
   if [ $? -eq 0 ]; then
     echo "Initialized Hive Metastore Server schema successfully.."
   else
