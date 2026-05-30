@@ -26,8 +26,8 @@ data class HiveTarballImage(
     val kind: String,
     val hiveVersion: String,
     val hiveUrl: String,
-    val vanillaImage: String,
-    val customImage: String,
+    val vanillaRepository: String,
+    val customRepository: String,
 )
 
 val registry = providers.gradleProperty("imageRegistry").orElse("openprojectx")
@@ -44,8 +44,8 @@ val images = listOf(
         kind = "full",
         hiveVersion = "3.1.3",
         hiveUrl = "https://archive.apache.org/dist/hive/hive-3.1.3/apache-hive-3.1.3-bin.tar.gz",
-        vanillaImage = "${registry.get()}/hive-vanilla:3.1.3-hadoop-$hadoopVersion-jdk17",
-        customImage = "${registry.get()}/hive:3.1.3-hadoop-$hadoopVersion-gcs-$gcsConnectorVersion-jdk17",
+        vanillaRepository = "hive-vanilla",
+        customRepository = "hive",
     ),
     HiveTarballImage(
         id = "hive-4.2.0",
@@ -53,8 +53,8 @@ val images = listOf(
         kind = "full",
         hiveVersion = "4.2.0",
         hiveUrl = "https://dlcdn.apache.org/hive/hive-4.2.0/apache-hive-4.2.0-bin.tar.gz",
-        vanillaImage = "${registry.get()}/hive-vanilla:4.2.0-hadoop-$hadoopVersion-jdk17",
-        customImage = "${registry.get()}/hive:4.2.0-hadoop-$hadoopVersion-gcs-$gcsConnectorVersion-jdk17",
+        vanillaRepository = "hive-vanilla",
+        customRepository = "hive",
     ),
     HiveTarballImage(
         id = "standalone-metastore-4.2.0",
@@ -62,8 +62,8 @@ val images = listOf(
         kind = "standalone-metastore",
         hiveVersion = "4.2.0",
         hiveUrl = "https://dlcdn.apache.org/hive/hive-standalone-metastore-4.2.0/hive-standalone-metastore-4.2.0-bin.tar.gz",
-        vanillaImage = "${registry.get()}/hive-standalone-metastore-vanilla:4.2.0-hadoop-$hadoopVersion-jdk17",
-        customImage = "${registry.get()}/hive-standalone-metastore:4.2.0-hadoop-$hadoopVersion-gcs-$gcsConnectorVersion-jdk17",
+        vanillaRepository = "hive-standalone-metastore-vanilla",
+        customRepository = "hive-standalone-metastore",
     ),
 )
 
@@ -97,6 +97,25 @@ fun extractedHiveDir(image: HiveTarballImage): String =
     } else {
         "apache-hive-${image.hiveVersion}-bin"
     }
+
+fun dockerTagSuffix(image: HiveTarballImage, custom: Boolean): String =
+    buildString {
+        append(project.version)
+        append("-")
+        append(image.hiveVersion)
+        append("-hadoop-")
+        append(hadoopVersion)
+        if (custom) {
+            append("-gcs-")
+            append(gcsConnectorVersion)
+        }
+        append("-jdk17")
+    }
+
+fun dockerImage(image: HiveTarballImage, custom: Boolean): String {
+    val repository = if (custom) image.customRepository else image.vanillaRepository
+    return "${registry.get()}/$repository:${dockerTagSuffix(image, custom)}"
+}
 
 fun String.cleanDockerfile(): String =
     lineSequence()
@@ -203,7 +222,7 @@ fun vanillaDockerfile(image: HiveTarballImage): String {
 
 fun customDockerfile(image: HiveTarballImage): String =
     """
-        FROM ${image.vanillaImage}
+        FROM ${dockerImage(image, custom = false)}
 
         USER root
         COPY _shared/gcs-libs/ /tmp/gcs-libs/
@@ -219,6 +238,7 @@ val generateDockerfiles by tasks.registering {
     outputs.dir(dockerRoot)
     inputs.property("useLocalTarballs", useLocalTarballs)
     inputs.property("imageRegistry", registry)
+    inputs.property("artifactVersion", provider { project.version.toString() })
     inputs.property("hadoopVersion", hadoopVersion)
     inputs.property("gcsConnectorVersion", gcsConnectorVersion)
 
@@ -271,20 +291,49 @@ fun registerDockerBuildTask(
     }
 }
 
+fun registerDockerPushTask(
+    name: String,
+    imageTag: Provider<String>,
+    buildTaskName: String,
+) {
+    tasks.register<Exec>(name) {
+        dependsOn(buildTaskName)
+        commandLine("docker", "push", imageTag.get())
+    }
+}
+
 images.forEach { image ->
+    val vanillaBuildTask = "dockerBuildVanilla${image.taskSuffix}"
+    val customBuildTask = "dockerBuildCustom${image.taskSuffix}"
     registerDockerBuildTask(
-        name = "dockerBuildVanilla${image.taskSuffix}",
+        name = vanillaBuildTask,
         dockerfileName = "${image.taskSuffix}/Dockerfile.vanilla",
-        imageTag = provider { image.vanillaImage },
+        imageTag = provider { dockerImage(image, custom = false) },
         needsTarballs = true,
     )
     registerDockerBuildTask(
-        name = "dockerBuildCustom${image.taskSuffix}",
+        name = customBuildTask,
         dockerfileName = "${image.taskSuffix}/Dockerfile.custom",
-        imageTag = provider { image.customImage },
+        imageTag = provider { dockerImage(image, custom = true) },
         needsTarballs = false,
         extraDependsOn = stageGcsDependencies,
     )
+    tasks.named(customBuildTask) {
+        mustRunAfter(vanillaBuildTask)
+    }
+    registerDockerPushTask(
+        name = "dockerPushVanilla${image.taskSuffix}",
+        imageTag = provider { dockerImage(image, custom = false) },
+        buildTaskName = vanillaBuildTask,
+    )
+    registerDockerPushTask(
+        name = "dockerPushCustom${image.taskSuffix}",
+        imageTag = provider { dockerImage(image, custom = true) },
+        buildTaskName = customBuildTask,
+    )
+    tasks.named("dockerPushCustom${image.taskSuffix}") {
+        mustRunAfter("dockerPushVanilla${image.taskSuffix}")
+    }
 }
 
 tasks.register("dockerBuildVanillaAll") {
@@ -297,4 +346,24 @@ tasks.register("dockerBuildCustomAll") {
 
 tasks.register("dockerBuildCustomHive4") {
     dependsOn("dockerBuildCustomHive420", "dockerBuildCustomStandaloneMetastore420")
+}
+
+tasks.register("dockerPushVanillaAll") {
+    dependsOn(images.map { "dockerPushVanilla${it.taskSuffix}" })
+}
+
+tasks.register("dockerPushCustomAll") {
+    dependsOn(images.map { "dockerPushCustom${it.taskSuffix}" })
+}
+
+tasks.register("dockerPushCustomHive4") {
+    dependsOn("dockerPushCustomHive420", "dockerPushCustomStandaloneMetastore420")
+}
+
+tasks.register("dockerReleaseImages") {
+    dependsOn("dockerPushVanillaAll", "dockerPushCustomAll")
+}
+
+tasks.named("dockerPushCustomAll") {
+    mustRunAfter("dockerPushVanillaAll")
 }
