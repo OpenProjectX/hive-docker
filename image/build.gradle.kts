@@ -100,8 +100,10 @@ fun extractedHiveDir(image: HiveTarballImage): String =
 
 fun dockerTagSuffix(image: HiveTarballImage, custom: Boolean): String =
     buildString {
-        append(project.version)
-        append("-")
+        if (custom) {
+            append(project.version)
+            append("-")
+        }
         append(image.hiveVersion)
         append("-hadoop-")
         append(hadoopVersion)
@@ -361,9 +363,5 @@ tasks.register("dockerPushCustomHive4") {
 }
 
 tasks.register("dockerReleaseImages") {
-    dependsOn("dockerPushVanillaAll", "dockerPushCustomAll")
-}
-
-tasks.named("dockerPushCustomAll") {
-    mustRunAfter("dockerPushVanillaAll")
+    dependsOn("dockerPushCustomAll")
 }
