@@ -65,6 +65,15 @@ data class HiveTarballImage(
 val registry = providers.gradleProperty("imageRegistry").orElse("openprojectx")
 val useLocalTarballs = providers.gradleProperty("useLocalTarballs").map(String::toBoolean).orElse(false)
 val localTarballDir = providers.gradleProperty("localTarballDir").orElse("/home/coder/Downloads")
+val jarConflictStrategy = providers.gradleProperty("image.jarConflictStrategy").orElse("remove")
+val priorityJarDir = providers.gradleProperty("image.priorityJarDir")
+val priorityJarRemovePatterns = providers.gradleProperty("image.priorityJarRemovePatterns")
+    .map { value ->
+        value.split(',')
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+    }
+    .orElse(emptyList())
 val hadoopVersion = libs.versions.hadoop.get()
 val gcsConnectorVersion = libs.versions.gcsConnector.get()
 val postgresqlVersion = libs.versions.postgresql.get()
@@ -130,6 +139,34 @@ val stageDatabaseDependencies by tasks.registering(Sync::class) {
     from(databaseRuntime)
 }
 
+val stagePriorityJarDependencies by tasks.registering(Sync::class) {
+    into(dockerRoot.map { it.dir("_shared/priority-libs") })
+    if (priorityJarDir.isPresent) {
+        from(provider { file(priorityJarDir.get()) }) {
+            include("*.jar")
+        }
+    }
+    doLast {
+        destinationDir.mkdirs()
+    }
+}
+
+val hive3HiveLibConflictPatterns = listOf(
+    "guava-*.jar",
+    "failureaccess-*.jar",
+    "listenablefuture-*.jar",
+    "disruptor-*.jar",
+)
+
+val hive3GcsHiveLibJarPatterns = hive3HiveLibConflictPatterns
+
+data class JarInstallPlan(
+    val sourceDir: String,
+    val targetDir: String,
+    val jarPatterns: List<String> = listOf("*.jar"),
+    val removeTargetPatterns: List<String> = emptyList(),
+)
+
 fun artifactName(image: HiveTarballImage): String =
     if (image.kind == "standalone-metastore") {
         "hive-standalone-metastore-${image.hiveVersion}-bin.tar.gz"
@@ -171,6 +208,61 @@ fun String.cleanDockerfile(): String =
         .map { it.trimStart() }
         .joinToString("\n")
         .trim()
+
+fun renderJarInstallPlan(plan: JarInstallPlan): String {
+    val copyGlobs = plan.jarPatterns.joinToString(" ") { pattern -> "${plan.sourceDir}/$pattern" }
+    val removeBlock = if (plan.removeTargetPatterns.isEmpty()) {
+        ""
+    } else {
+        val removeGlobs = plan.removeTargetPatterns.joinToString(" ") { pattern -> "${plan.targetDir}/$pattern" }
+        """if [ "${'$'}JAR_CONFLICT_STRATEGY" = "remove" ]; then rm -f $removeGlobs; fi; \"""
+    }
+
+    return listOf(
+        removeBlock,
+        """
+            for jar in $copyGlobs; do \
+                [ -e "${'$'}jar" ] || continue; \
+                cp "${'$'}jar" ${plan.targetDir}/; \
+            done
+        """.trimIndent(),
+    ).filter(String::isNotBlank).joinToString("\n")
+}
+
+fun customJarInstallPlans(image: HiveTarballImage): List<JarInstallPlan> =
+    buildList {
+        add(
+            JarInstallPlan(
+                sourceDir = "/tmp/gcs-libs",
+                targetDir = "/opt/hadoop/share/hadoop/common/lib",
+            )
+        )
+        if (image.hiveVersion == "3.1.3") {
+            add(
+                JarInstallPlan(
+                    sourceDir = "/tmp/gcs-libs",
+                    targetDir = "/opt/hive/lib",
+                    jarPatterns = hive3GcsHiveLibJarPatterns,
+                    removeTargetPatterns = hive3HiveLibConflictPatterns,
+                )
+            )
+        }
+        add(
+            JarInstallPlan(
+                sourceDir = "/tmp/database-libs",
+                targetDir = "/opt/hive/lib",
+            )
+        )
+        if (priorityJarDir.isPresent) {
+            add(
+                JarInstallPlan(
+                    sourceDir = "/tmp/priority-libs",
+                    targetDir = "/opt/hive/lib",
+                    removeTargetPatterns = priorityJarRemovePatterns.get(),
+                )
+            )
+        }
+    }
 
 fun vanillaDockerfile(image: HiveTarballImage): String {
     val packagingDir = if (image.kind == "standalone-metastore") "standalone-metastore" else "full"
@@ -271,6 +363,13 @@ fun vanillaDockerfile(image: HiveTarballImage): String {
 
 fun customDockerfile(image: HiveTarballImage): String {
     val packagingDir = if (image.kind == "standalone-metastore") "standalone-metastore" else "full"
+    val jarInstallCommands = customJarInstallPlans(image)
+        .joinToString("; \\\n            ") { renderJarInstallPlan(it) }
+    val priorityJarCopy = if (priorityJarDir.isPresent) {
+        "COPY _shared/priority-libs/ /tmp/priority-libs/"
+    } else {
+        ""
+    }
     val hive3Compatibility = if (image.hiveVersion == "3.1.3") {
         """
             COPY _shared/hive3-libs/ /tmp/hive3-libs/
@@ -285,23 +384,20 @@ fun customDockerfile(image: HiveTarballImage): String {
     return """
         FROM ${dockerImage(image, custom = false)}
 
+        ARG JAR_CONFLICT_STRATEGY=${jarConflictStrategy.get()}
         USER root
         COPY --chown=hive:hive $packagingDir/entrypoint.sh /entrypoint.sh
         COPY --chown=hive:hive $packagingDir/conf ${'$'}HIVE_HOME/conf
         COPY _shared/gcs-libs/ /tmp/gcs-libs/
         COPY _shared/database-libs/ /tmp/database-libs/
+        $priorityJarCopy
         RUN set -eux; \
             chmod +x /entrypoint.sh; \
             mkdir -p /opt/hadoop/share/hadoop/common/lib; \
-            cp /tmp/gcs-libs/*.jar /opt/hadoop/share/hadoop/common/lib/; \
-            if [ "${image.hiveVersion}" = "3.1.3" ]; then \
-                for jar in /tmp/gcs-libs/guava-*.jar /tmp/gcs-libs/failureaccess-*.jar /tmp/gcs-libs/listenablefuture-*.jar /tmp/gcs-libs/disruptor-*.jar; do \
-                    cp "${'$'}jar" "/opt/hive/lib/0-${'$'}(basename "${'$'}jar")"; \
-                done; \
-            fi; \
-            cp /tmp/database-libs/*.jar /opt/hive/lib/; \
+            $jarInstallCommands; \
             rm -rf /tmp/gcs-libs; \
             rm -rf /tmp/database-libs; \
+            rm -rf /tmp/priority-libs; \
             chown -R hive:hive /opt/hadoop /opt/hive
         $hive3Compatibility
         USER hive
@@ -316,8 +412,23 @@ val generateDockerfiles by tasks.registering {
     inputs.property("hadoopVersion", hadoopVersion)
     inputs.property("gcsConnectorVersion", gcsConnectorVersion)
     inputs.property("postgresqlVersion", postgresqlVersion)
+    inputs.property("jarConflictStrategy", jarConflictStrategy)
+    inputs.property("priorityJarDir", priorityJarDir.orElse(""))
+    inputs.property("priorityJarRemovePatterns", priorityJarRemovePatterns.map { it.joinToString(",") })
 
     doLast {
+        require(jarConflictStrategy.get() in setOf("remove", "keep")) {
+            "Unsupported image.jarConflictStrategy=${jarConflictStrategy.get()}. Use 'remove' or 'keep'."
+        }
+        if (priorityJarDir.isPresent) {
+            val jarDir = file(priorityJarDir.get())
+            require(jarDir.isDirectory) {
+                "image.priorityJarDir must point to an existing directory: ${jarDir.absolutePath}"
+            }
+            require(jarDir.listFiles { file -> file.isFile && file.extension == "jar" }?.isNotEmpty() == true) {
+                "image.priorityJarDir must contain at least one *.jar: ${jarDir.absolutePath}"
+            }
+        }
         val root = dockerRoot.get().asFile
         images.forEach { image ->
             val imageDir = root.resolve(image.taskSuffix)
@@ -414,9 +525,9 @@ images.forEach { image ->
         needsTarballs = false,
         cacheScope = "custom-${image.taskSuffix}",
         extraDependsOn = if (image.hiveVersion == "3.1.3") {
-            listOf(stageGcsDependencies, stageDatabaseDependencies, stageHive3Dependencies)
+            listOf(stageGcsDependencies, stageDatabaseDependencies, stageHive3Dependencies, stagePriorityJarDependencies)
         } else {
-            listOf(stageGcsDependencies, stageDatabaseDependencies)
+            listOf(stageGcsDependencies, stageDatabaseDependencies, stagePriorityJarDependencies)
         },
     )
     tasks.named(customBuildTask) {

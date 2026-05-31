@@ -10,6 +10,7 @@ This repository builds Docker images and the `hive-docker-testcontainers` helper
 - Keep custom image tags tied to the Gradle release version, with the project version at the end of the tag.
 - Preserve the release-commit guard in workflows before enabling or changing push triggers.
 - Keep database drivers in custom images unless the project explicitly decides to make them part of vanilla.
+- Keep custom image dependency replacement in the Gradle jar-install model in `image/build.gradle.kts`. Do not add one-off inline shell blocks for new conflict families.
 
 ## Local Setup
 
@@ -38,6 +39,10 @@ Override it if needed:
 ```bash
 -PlocalTarballDir=/path/to/tarballs
 ```
+
+Custom image jar replacement defaults to `-Pimage.jarConflictStrategy=remove`. For Hive 3 this removes configured old Hive-side jars before copying the GCS-compatible versions. To add user-provided high-priority jars during a build, stage them with `-Pimage.priorityJarDir=/path/to/jars` and list any old target jars to remove with `-Pimage.priorityJarRemovePatterns='old-lib-*.jar,another-lib-*.jar'`.
+
+Use the runtime `/tmp/ext-jars` mount only for quick experiments. For releaseable images, bake replacement jars into the custom image with the Gradle properties above so the final jar set is inspectable and reproducible.
 
 ## Validation
 

@@ -46,6 +46,28 @@ Vanilla Dockerfiles install only the original Apache Hive/HMS and Hadoop distrib
 
 The Dockerfile generator and image tasks live in [image/build.gradle.kts](image/build.gradle.kts).
 
+Custom image jar placement is config-driven in Gradle. By default, Hive 3 removes known old Hive-side dependency families before installing the GCS-compatible copies into `/opt/hive/lib`; this currently covers Guava, failureaccess, listenablefuture, and Disruptor. This avoids duplicate classes from older Hive 3 jars.
+
+Build-time jar conflict options:
+
+| Gradle property | Default | Purpose |
+| --- | --- | --- |
+| `image.jarConflictStrategy` | `remove` | Use `remove` to delete configured conflicting target jars before copying replacements, or `keep` to only add jars. |
+| `image.priorityJarDir` | unset | Directory of user-provided `*.jar` files to bake into `/opt/hive/lib` in the custom image. |
+| `image.priorityJarRemovePatterns` | unset | Comma-separated target jar globs to remove from `/opt/hive/lib` before copying `image.priorityJarDir` jars. |
+
+Example: build a custom Hive 3 image with a site-provided replacement jar:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
+  :image:dockerBuildCustomHive313 \
+  -PimageRegistry=ghcr.io/openprojectx \
+  -Pimage.priorityJarDir="$PWD/priority-jars" \
+  -Pimage.priorityJarRemovePatterns='example-lib-*.jar'
+```
+
+Use `image.priorityJarDir` for deterministic image builds. The runtime `/tmp/ext-jars` mount is still available for quick experiments, but it does not remove older conflicting jars.
+
 ## Local Development
 
 Use the shared Gradle cache:
@@ -274,7 +296,7 @@ Shared runtime inputs:
 | Env or mount | Default | Applies to | Purpose |
 | --- | --- | --- | --- |
 | `HIVE_CUSTOM_CONF_DIR` | unset | all custom images | Directory of custom config files to symlink into `/opt/hive/conf`. |
-| `/tmp/ext-jars` | unset | all custom images | Mount extra `*.jar` files; entrypoint copies them into `/opt/hive/lib` before startup. |
+| `/tmp/ext-jars` | unset | all custom images | Mount extra `*.jar` files; entrypoint copies them into `/opt/hive/lib` before startup. This is a runtime convenience path, not the preferred conflict-replacement path. |
 | `HIVE_WAREHOUSE_PATH` | `/opt/hive/data/warehouse` | all custom images | Warehouse path used in generated config. |
 | `DB_DRIVER` | `derby` | all custom images | Use `derby`, `postgres`, or `postgresql`. |
 | `IS_RESUME` | `false` | all custom images | Set `true` to skip `schematool` schema initialization on restart. |
