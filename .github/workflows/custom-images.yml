@@ -34,10 +34,12 @@ jobs:
     env:
       IMAGE_REGISTRY: ${{ inputs.image_registry || 'ghcr.io/openprojectx' }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
 
       - uses: actions/setup-java@v4
         with:
@@ -62,9 +64,20 @@ jobs:
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Release custom Docker images
+      - name: Write signing key
+        env:
+          SIGNING_KEY_ASC: ${{ secrets.SIGNING_KEY_ASC }}
+        run: |
+          printf '%s' "$SIGNING_KEY_ASC" > "$RUNNER_TEMP/signing-key.asc"
+
+      - name: Release custom images and Testcontainers jar
+        env:
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          SIGNING_KEY_FILE: ${{ runner.temp }}/signing-key.asc
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           release_version="${{ inputs.release_version }}"
           next_version="${{ inputs.next_version }}"
@@ -83,7 +96,7 @@ jobs:
           fi
 
           ./gradlew --no-configuration-cache release \
-            -Prelease.kind=images \
+            -Prelease.kind=all \
             -Prelease.useAutomaticVersion=true \
             -Prelease.releaseVersion="$release_version" \
             -Prelease.newVersion="$next_version" \

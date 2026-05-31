@@ -140,7 +140,19 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
 
 This task builds the custom images, runs smoke tests against the just-built local custom image tags, and only then pushes the custom images.
 
-Run the image release through the Gradle release plugin:
+Run the full release through the Gradle release plugin. By default this builds and pushes custom images first, then publishes the Testcontainers helper jar:
+
+```bash
+env OSSRH_USERNAME=<user> OSSRH_PASSWORD=<password> \
+  SIGNING_KEY_FILE=/path/to/signing-key.asc SIGNING_KEY_PASSWORD=<password> \
+  GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
+  -Prelease.useAutomaticVersion=true \
+  -Prelease.releaseVersion=0.1.0 \
+  -Prelease.newVersion=0.1.1-SNAPSHOT \
+  -PimageRegistry=ghcr.io/openprojectx
+```
+
+Focused manual releases are available with `-Prelease.kind=images` or `-Prelease.kind=jar`.
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
@@ -149,18 +161,6 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
   -Prelease.releaseVersion=0.1.0 \
   -Prelease.newVersion=0.1.1-SNAPSHOT \
   -PimageRegistry=ghcr.io/openprojectx
-```
-
-Run the Testcontainers jar release through the Gradle release plugin. This uses the configured Sonatype/Maven Central release credentials and publishes only the helper jar:
-
-```bash
-env OSSRH_USERNAME=<user> OSSRH_PASSWORD=<password> \
-  SIGNING_KEY_FILE=/path/to/signing-key.asc SIGNING_KEY_PASSWORD=<password> \
-  GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
-  -Prelease.kind=jar \
-  -Prelease.useAutomaticVersion=true \
-  -Prelease.releaseVersion=0.1.0 \
-  -Prelease.newVersion=0.1.1-SNAPSHOT
 ```
 
 ## Testcontainers Module
@@ -671,7 +671,7 @@ The workflow caches Apache Hive/HMS and Hadoop release tarballs under `.cache/ap
 
 [.github/workflows/custom-images.yml](.github/workflows/custom-images.yml)
 
-Runs on pushes to `master` and can also be triggered manually. It runs the Gradle `release` task with `-Prelease.kind=images` and publishes custom images only.
+Runs on pushes to `master` and can also be triggered manually. It runs the Gradle `release` task with `-Prelease.kind=all`, publishing custom images first and then the `hive-docker-testcontainers` jar.
 
 The release task validates the default smoke subjects before publishing custom images:
 
@@ -694,12 +694,6 @@ Gradle release commits are skipped to avoid workflow loops:
 ```yaml
 if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[Gradle Release Plugin]') }}
 ```
-
-### Jar Release
-
-[.github/workflows/jar-release.yml](.github/workflows/jar-release.yml)
-
-Manual only. It runs the Gradle `release` task with `-Prelease.kind=jar` and publishes the `:testcontainers` jar through Sonatype/Maven Central using the configured release secrets.
 
 ## Caching
 

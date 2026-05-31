@@ -113,7 +113,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-The custom-images workflow runs the Gradle release task with `-Prelease.kind=images`, so the release pipeline validates and publishes custom images only.
+The custom-images workflow runs the Gradle release task with `-Prelease.kind=all`. It builds and pushes custom images first, then runs the Testcontainers module tests and publishes the helper jar.
 
 Build the selected local custom images as part of the smoke test only when needed:
 
@@ -225,7 +225,7 @@ Custom images are released by the **Custom Images** workflow. On push to `master
 
 Manual workflow dispatch may override these values.
 
-The jar-release workflow runs the Gradle release task with `-Prelease.kind=jar` and publishes only the `:testcontainers` jar through Sonatype. It uses the same GitHub secrets as the existing Maven Central release setup:
+The same workflow publishes the `:testcontainers` jar through Sonatype after image push. It uses the same GitHub secrets as the existing Maven Central release setup:
 
 - `RELEASE_GITHUB_TOKEN`
 - `OSSRH_USERNAME`
@@ -233,17 +233,19 @@ The jar-release workflow runs the Gradle release task with `-Prelease.kind=jar` 
 - `SIGNING_KEY_ASC`
 - `SIGNING_KEY_PASSWORD`
 
-For local jar publishing, provide the same values as environment variables:
+For a local full release, provide the same values as environment variables:
 
 ```bash
 env OSSRH_USERNAME=<user> OSSRH_PASSWORD=<password> \
   SIGNING_KEY_FILE=/path/to/signing-key.asc SIGNING_KEY_PASSWORD=<password> \
   GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
-  -Prelease.kind=jar \
   -Prelease.useAutomaticVersion=true \
   -Prelease.releaseVersion=0.1.0 \
-  -Prelease.newVersion=0.1.1-SNAPSHOT
+  -Prelease.newVersion=0.1.1-SNAPSHOT \
+  -PimageRegistry=ghcr.io/openprojectx
 ```
+
+Use `-Prelease.kind=images` or `-Prelease.kind=jar` only for focused manual release recovery.
 
 ## Compatibility Notes
 
