@@ -116,6 +116,16 @@ function initialize_hive {
   fi
 }
 
+function append_logging_opts {
+  : "${HIVE_LOG_LEVEL:=INFO}"
+  : "${HIVE_PERF_LOG_LEVEL:=INFO}"
+  : "${HIVE_ROOT_LOGGER:=stdout}"
+  HADOOP_CLIENT_OPTS="${HADOOP_CLIENT_OPTS:-} -Dhive.log.level=${HIVE_LOG_LEVEL} -Dhive.perflogger.log.level=${HIVE_PERF_LOG_LEVEL} -Dhive.root.logger=${HIVE_ROOT_LOGGER}"
+  if [[ -n "${HIVE_LOG4J2_CONFIGURATION_FILE:-}" ]]; then
+    HADOOP_CLIENT_OPTS="${HADOOP_CLIENT_OPTS} -Dlog4j.configurationFile=${HIVE_LOG4J2_CONFIGURATION_FILE}"
+  fi
+}
+
 export HIVE_CONF_DIR=$HIVE_HOME/conf
 if [ -d "${HIVE_CUSTOM_CONF_DIR:-}" ]; then
   find "${HIVE_CUSTOM_CONF_DIR}" -type f -exec \
@@ -123,6 +133,7 @@ if [ -d "${HIVE_CUSTOM_CONF_DIR:-}" ]; then
   export HADOOP_CONF_DIR=$HIVE_CONF_DIR
 fi
 
+append_logging_opts
 export HADOOP_CLIENT_OPTS="$HADOOP_CLIENT_OPTS -Xmx1G $SERVICE_OPTS"
 if [[ "${SKIP_SCHEMA_INIT}" == "false" ]]; then
   # handles schema initialization

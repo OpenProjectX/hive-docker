@@ -149,6 +149,16 @@ function append_java_opens {
   done
 }
 
+function append_logging_opts {
+  : "${HIVE_LOG_LEVEL:=INFO}"
+  : "${HIVE_PERF_LOG_LEVEL:=INFO}"
+  : "${HIVE_ROOT_LOGGER:=stdout}"
+  HADOOP_CLIENT_OPTS="${HADOOP_CLIENT_OPTS:-} -Dhive.log.level=${HIVE_LOG_LEVEL} -Dhive.perflogger.log.level=${HIVE_PERF_LOG_LEVEL} -Dhive.root.logger=${HIVE_ROOT_LOGGER}"
+  if [[ -n "${HIVE_LOG4J2_CONFIGURATION_FILE:-}" ]]; then
+    HADOOP_CLIENT_OPTS="${HADOOP_CLIENT_OPTS} -Dlog4j.configurationFile=${HIVE_LOG4J2_CONFIGURATION_FILE}"
+  fi
+}
+
 function run_llap {
   export LLAP_MEMORY_MB="${LLAP_MEMORY_MB:-1024}"
   export LLAP_EXECUTORS="${LLAP_EXECUTORS:-1}"
@@ -225,6 +235,7 @@ if [ -d "${HIVE_CUSTOM_CONF_DIR:-}" ]; then
   export TEZ_CONF_DIR=$HIVE_CONF_DIR
 fi
 
+append_logging_opts
 export HADOOP_CLIENT_OPTS="${HADOOP_CLIENT_OPTS:-} -Xmx1G ${SERVICE_OPTS:-}"
 if [[ "${SKIP_SCHEMA_INIT}" == "false" && ( "${SERVICE_NAME}" == "hiveserver2" || "${SERVICE_NAME}" == "metastore" ) ]]; then
   # handles schema initialization

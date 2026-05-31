@@ -301,6 +301,10 @@ Shared runtime inputs:
 | `DB_DRIVER` | `derby` | all custom images | Use `derby`, `postgres`, or `postgresql`. |
 | `IS_RESUME` | `false` | all custom images | Set `true` to skip `schematool` schema initialization on restart. |
 | `VERBOSE` | unset | all custom images | Set `true` to pass verbose mode to schema initialization where supported. |
+| `HIVE_LOG_LEVEL` | `INFO` | all custom images | Root Hive log4j2 level, for example `DEBUG` while troubleshooting. |
+| `HIVE_PERF_LOG_LEVEL` | `INFO` | all custom images | Hive `PerfLogger` log level. |
+| `HIVE_ROOT_LOGGER` | `stdout` | all custom images | Hive root log4j2 appender reference. |
+| `HIVE_LOG4J2_CONFIGURATION_FILE` | unset | all custom images | Full path to a mounted custom log4j2 properties file. |
 | `SERVICE_OPTS` | unset | all custom images | Extra JVM options appended to `HADOOP_CLIENT_OPTS`. |
 | `METASTORE_PORT` | `9083` | HMS services | Metastore thrift port inside the container. |
 
@@ -368,6 +372,26 @@ Mount custom config files:
 docker run --rm -p 9083:9083 \
   -e SERVICE_NAME=metastore \
   -e HIVE_CUSTOM_CONF_DIR=/conf \
+  -v "$PWD/conf:/conf:ro" \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+Enable verbose Hive logging without mounting a full config directory:
+
+```bash
+docker run --rm -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
+  -e HIVE_LOG_LEVEL=DEBUG \
+  -e HIVE_PERF_LOG_LEVEL=DEBUG \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+Use a custom log4j2 file when you need package-specific loggers:
+
+```bash
+docker run --rm -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
+  -e HIVE_LOG4J2_CONFIGURATION_FILE=/conf/hive-log4j2-debug.properties \
   -v "$PWD/conf:/conf:ro" \
   ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 ```

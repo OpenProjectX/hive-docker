@@ -44,6 +44,8 @@ Custom image jar replacement defaults to `-Pimage.jarConflictStrategy=remove`. F
 
 Use the runtime `/tmp/ext-jars` mount only for quick experiments. For releaseable images, bake replacement jars into the custom image with the Gradle properties above so the final jar set is inspectable and reproducible.
 
+For runtime troubleshooting, prefer `HIVE_LOG_LEVEL=DEBUG` or a mounted log4j2 file through `HIVE_LOG4J2_CONFIGURATION_FILE` before changing the baked image defaults. Keep default image logging at `INFO`.
+
 ## Validation
 
 Before opening a change, run:
