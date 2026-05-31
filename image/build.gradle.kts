@@ -78,6 +78,13 @@ val hadoopVersion = libs.versions.hadoop.get()
 val gcsConnectorVersion = libs.versions.gcsConnector.get()
 val postgresqlVersion = libs.versions.postgresql.get()
 val hadoopUrl = "https://archive.apache.org/dist/hadoop/core/hadoop-$hadoopVersion/hadoop-$hadoopVersion.tar.gz"
+val gitCommitShort = providers.environmentVariable("GITHUB_SHA")
+    .map { it.take(8) }
+    .orElse(
+        providers.exec {
+            commandLine("git", "rev-parse", "--short=8", "HEAD")
+        }.standardOutput.asText.map { it.trim().take(8) }
+    )
 
 val images = listOf(
     HiveTarballImage(
@@ -201,6 +208,11 @@ fun dockerTagSuffix(image: HiveTarballImage, custom: Boolean): String =
 fun dockerImage(image: HiveTarballImage, custom: Boolean): String {
     val repository = if (custom) image.customRepository else image.vanillaRepository
     return "${registry.get()}/$repository:${dockerTagSuffix(image, custom)}"
+}
+
+fun dockerImageTags(image: HiveTarballImage, custom: Boolean): List<String> {
+    val versionTag = dockerImage(image, custom)
+    return listOf(versionTag, "$versionTag-${gitCommitShort.get()}")
 }
 
 fun String.cleanDockerfile(): String =
@@ -452,7 +464,7 @@ val stageDockerAssets by tasks.registering(Copy::class) {
 fun registerDockerBuildTask(
     name: String,
     dockerfileName: String,
-    imageTag: Provider<String>,
+    imageTags: Provider<List<String>>,
     needsTarballs: Boolean,
     cacheScope: String,
     extraDependsOn: Any? = null,
@@ -467,6 +479,7 @@ fun registerDockerBuildTask(
         }
         workingDir = dockerRoot.get().asFile
         val dockerfile = dockerRoot.get().file(dockerfileName).asFile.absolutePath
+        val tagArgs = imageTags.get().flatMap { listOf("-t", it) }
         if (System.getenv("GITHUB_ACTIONS").equals("true", ignoreCase = true)) {
             commandLine(
                 "docker",
@@ -479,8 +492,7 @@ fun registerDockerBuildTask(
                 "type=gha,mode=max,scope=$cacheScope",
                 "-f",
                 dockerfile,
-                "-t",
-                imageTag.get(),
+                *tagArgs.toTypedArray(),
                 ".",
             )
         } else {
@@ -489,8 +501,7 @@ fun registerDockerBuildTask(
                 "build",
                 "-f",
                 dockerfile,
-                "-t",
-                imageTag.get(),
+                *tagArgs.toTypedArray(),
                 ".",
             )
         }
@@ -499,12 +510,12 @@ fun registerDockerBuildTask(
 
 fun registerDockerPushTask(
     name: String,
-    imageTag: Provider<String>,
+    imageTags: Provider<List<String>>,
     buildTaskName: String,
 ) {
     tasks.register<Exec>(name) {
         dependsOn(buildTaskName)
-        commandLine("docker", "push", imageTag.get())
+        commandLine("sh", "-c", imageTags.get().joinToString(" && ") { "docker push $it" })
     }
 }
 
@@ -514,14 +525,14 @@ images.forEach { image ->
     registerDockerBuildTask(
         name = vanillaBuildTask,
         dockerfileName = "${image.taskSuffix}/Dockerfile.vanilla",
-        imageTag = provider { dockerImage(image, custom = false) },
+        imageTags = provider { dockerImageTags(image, custom = false) },
         needsTarballs = true,
         cacheScope = "vanilla-${image.taskSuffix}",
     )
     registerDockerBuildTask(
         name = customBuildTask,
         dockerfileName = "${image.taskSuffix}/Dockerfile.custom",
-        imageTag = provider { dockerImage(image, custom = true) },
+        imageTags = provider { dockerImageTags(image, custom = true) },
         needsTarballs = false,
         cacheScope = "custom-${image.taskSuffix}",
         extraDependsOn = if (image.hiveVersion == "3.1.3") {
@@ -535,12 +546,12 @@ images.forEach { image ->
     }
     registerDockerPushTask(
         name = "dockerPushVanilla${image.taskSuffix}",
-        imageTag = provider { dockerImage(image, custom = false) },
+        imageTags = provider { dockerImageTags(image, custom = false) },
         buildTaskName = vanillaBuildTask,
     )
     registerDockerPushTask(
         name = "dockerPushCustom${image.taskSuffix}",
-        imageTag = provider { dockerImage(image, custom = true) },
+        imageTags = provider { dockerImageTags(image, custom = true) },
         buildTaskName = customBuildTask,
     )
     tasks.named("dockerPushCustom${image.taskSuffix}") {

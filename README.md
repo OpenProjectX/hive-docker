@@ -18,6 +18,8 @@ Releases publish Docker images and the `hive-docker-testcontainers` helper jar.
 | `hive` | Custom Hive image with S3A, GCS, and PostgreSQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
 | `hive-standalone-metastore` | Custom standalone HMS image with S3A, GCS, and PostgreSQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
 
+Every build also tags the same image with the first 8 characters of the Git commit appended to the normal tag, for example `<normal-tag>-1a2b3c4d`. Use the normal tag for stable version selection and the commit tag for traceability.
+
 Current versions are managed in [gradle/libs.versions.toml](gradle/libs.versions.toml):
 
 - Hadoop: `3.4.2`
@@ -138,24 +140,27 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
 
 This task builds the custom images, runs smoke tests against the just-built local custom image tags, and only then pushes the custom images.
 
-The root `release` task also publishes the Testcontainers helper jar to GitHub Packages:
+Run the image release through the Gradle release plugin:
 
 ```bash
-env GITHUB_ACTOR=<user> GITHUB_TOKEN=<token> GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
+  -Prelease.kind=images \
   -Prelease.useAutomaticVersion=true \
   -Prelease.releaseVersion=0.1.0 \
   -Prelease.newVersion=0.1.1-SNAPSHOT \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-Run the image-only release task:
+Run the Testcontainers jar release through the Gradle release plugin. This uses the configured Sonatype/Maven Central release credentials and publishes only the helper jar:
 
 ```bash
-env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
+env OSSRH_USERNAME=<user> OSSRH_PASSWORD=<password> \
+  SIGNING_KEY_FILE=/path/to/signing-key.asc SIGNING_KEY_PASSWORD=<password> \
+  GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
+  -Prelease.kind=jar \
   -Prelease.useAutomaticVersion=true \
   -Prelease.releaseVersion=0.1.0 \
-  -Prelease.newVersion=0.1.1-SNAPSHOT \
-  -PimageRegistry=ghcr.io/openprojectx
+  -Prelease.newVersion=0.1.1-SNAPSHOT
 ```
 
 ## Testcontainers Module
@@ -409,7 +414,7 @@ If Spark creates external tables with `s3a://` or `gs://` locations through HMS,
 
 ## Testcontainers Helper
 
-The `:testcontainers` module publishes `org.openprojectx.hive.docker.core:hive-docker-testcontainers:<version>` to GitHub Packages. It provides image tag helpers and preconfigured HMS containers with the same tag format as the Docker build.
+The `:testcontainers` module publishes `org.openprojectx.hive.docker.core:hive-docker-testcontainers:<version>`. It provides image tag helpers and preconfigured HMS containers with the same tag format as the Docker build.
 
 Gradle dependency example:
 
@@ -666,7 +671,7 @@ The workflow caches Apache Hive/HMS and Hadoop release tarballs under `.cache/ap
 
 [.github/workflows/custom-images.yml](.github/workflows/custom-images.yml)
 
-Runs on pushes to `master` and can also be triggered manually. It runs the Gradle `release` task and publishes custom images plus the `hive-docker-testcontainers` jar.
+Runs on pushes to `master` and can also be triggered manually. It runs the Gradle `release` task with `-Prelease.kind=images` and publishes custom images only.
 
 The release task validates the default smoke subjects before publishing custom images:
 
@@ -678,11 +683,23 @@ The release task validates the default smoke subjects before publishing custom i
 
 Those are the same tags produced by the current custom image build in the workflow.
 
+Each published image is also pushed with a commit trace tag:
+
+```text
+<normal-tag>-<git-sha8>
+```
+
 Gradle release commits are skipped to avoid workflow loops:
 
 ```yaml
 if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[Gradle Release Plugin]') }}
 ```
+
+### Jar Release
+
+[.github/workflows/jar-release.yml](.github/workflows/jar-release.yml)
+
+Manual only. It runs the Gradle `release` task with `-Prelease.kind=jar` and publishes the `:testcontainers` jar through Sonatype/Maven Central using the configured release secrets.
 
 ## Caching
 

@@ -45,7 +45,9 @@ jobs:
           java-version: |
             17
             21
-          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - uses: docker/setup-buildx-action@v3
 
@@ -81,6 +83,7 @@ jobs:
           fi
 
           ./gradlew --no-configuration-cache release \
+            -Prelease.kind=images \
             -Prelease.useAutomaticVersion=true \
             -Prelease.releaseVersion="$release_version" \
             -Prelease.newVersion="$next_version" \

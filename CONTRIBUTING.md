@@ -1,6 +1,6 @@
 # Contributing
 
-This repository builds Docker images and the `hive-docker-testcontainers` helper jar. Do not add Maven Central, Sonatype, or signing flows unless the project direction changes explicitly.
+This repository builds Docker images and the `hive-docker-testcontainers` helper jar.
 
 ## Development Rules
 
@@ -8,6 +8,7 @@ This repository builds Docker images and the `hive-docker-testcontainers` helper
 - Put project-specific dependencies in custom images.
 - Keep vanilla image tags independent from the Gradle project release version.
 - Keep custom image tags tied to the Gradle release version, with the project version at the end of the tag.
+- Keep the additional commit trace tag as an alias of the normal image tag: `<normal-tag>-<git-sha8>`.
 - Preserve the release-commit guard in workflows before enabling or changing push triggers.
 - Keep database drivers in custom images unless the project explicitly decides to make them part of vanilla.
 - Keep custom image dependency replacement in the Gradle jar-install model in `image/build.gradle.kts`. Do not add one-off inline shell blocks for new conflict families.
@@ -112,7 +113,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
-The custom-images workflow runs the Gradle release task without skipping storage smoke tests, so the release pipeline also runs the Spark/Iceberg S3 and GCS smoke tests before publishing the helper jar.
+The custom-images workflow runs the Gradle release task with `-Prelease.kind=images`, so the release pipeline validates and publishes custom images only.
 
 Build the selected local custom images as part of the smoke test only when needed:
 
@@ -224,10 +225,24 @@ Custom images are released by the **Custom Images** workflow. On push to `master
 
 Manual workflow dispatch may override these values.
 
-The same Gradle `release` run publishes `:testcontainers` to GitHub Packages. The workflow exports `GITHUB_TOKEN`; local publishing needs equivalent credentials:
+The jar-release workflow runs the Gradle release task with `-Prelease.kind=jar` and publishes only the `:testcontainers` jar through Sonatype. It uses the same GitHub secrets as the existing Maven Central release setup:
+
+- `RELEASE_GITHUB_TOKEN`
+- `OSSRH_USERNAME`
+- `OSSRH_PASSWORD`
+- `SIGNING_KEY_ASC`
+- `SIGNING_KEY_PASSWORD`
+
+For local jar publishing, provide the same values as environment variables:
 
 ```bash
-env GITHUB_ACTOR=<user> GITHUB_TOKEN=<token> GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :testcontainers:publish
+env OSSRH_USERNAME=<user> OSSRH_PASSWORD=<password> \
+  SIGNING_KEY_FILE=/path/to/signing-key.asc SIGNING_KEY_PASSWORD=<password> \
+  GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
+  -Prelease.kind=jar \
+  -Prelease.useAutomaticVersion=true \
+  -Prelease.releaseVersion=0.1.0 \
+  -Prelease.newVersion=0.1.1-SNAPSHOT
 ```
 
 ## Compatibility Notes

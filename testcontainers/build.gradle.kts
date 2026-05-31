@@ -1,6 +1,7 @@
 plugins {
     `java-library`
     `maven-publish`
+    signing
 }
 
 base {
@@ -145,19 +146,15 @@ publishing {
             }
         }
     }
+}
 
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/openprojectx/hive-docker")
-            credentials {
-                username = providers.gradleProperty("gpr.user")
-                    .orElse(providers.environmentVariable("GITHUB_ACTOR"))
-                    .orNull
-                password = providers.gradleProperty("gpr.key")
-                    .orElse(providers.environmentVariable("GITHUB_TOKEN"))
-                    .orNull
-            }
-        }
+signing {
+    val keyFile = System.getenv("SIGNING_KEY_FILE")
+    val keyPass = System.getenv("SIGNING_KEY_PASSWORD")
+
+    if (!keyFile.isNullOrBlank()) {
+        val keyText = file(keyFile).readText()
+        useInMemoryPgpKeys(keyText, keyPass)
+        sign(publishing.publications)
     }
 }
