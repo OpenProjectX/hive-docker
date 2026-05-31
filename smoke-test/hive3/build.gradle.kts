@@ -23,8 +23,8 @@ val imageRegistry = providers.gradleProperty("imageRegistry").orElse("ghcr.io/op
 val image = providers.gradleProperty("smoke.image.$subjectId").orElse(
     provider {
         "${imageRegistry.get()}/hive:" +
-            "${project.version}-3.1.3-hadoop-${libs.versions.hadoop.get()}" +
-            "-gcs-${libs.versions.gcsConnector.get()}-jdk17"
+            "3.1.3-hadoop-${libs.versions.hadoop.get()}" +
+            "-gcs-${libs.versions.gcsConnector.get()}-jdk17-${project.version}"
     }
 )
 val enabledSubjects = providers.gradleProperty("smoke.subjects")

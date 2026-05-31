@@ -1,13 +1,13 @@
 # Contributing
 
-This repository builds Docker images only. Do not add Maven Central, Sonatype, signing, or jar publishing flows unless the project direction changes explicitly.
+This repository builds Docker images and the `hive-docker-testcontainers` helper jar. Do not add Maven Central, Sonatype, or signing flows unless the project direction changes explicitly.
 
 ## Development Rules
 
 - Keep vanilla images clean: only Apache Hive/HMS, Apache Hadoop, JDK, and minimal runtime OS packages.
 - Put project-specific dependencies in custom images.
 - Keep vanilla image tags independent from the Gradle project release version.
-- Keep custom image tags tied to the Gradle release version.
+- Keep custom image tags tied to the Gradle release version, with the project version at the end of the tag.
 - Preserve the release-commit guard in workflows before enabling or changing push triggers.
 - Keep database drivers in custom images unless the project explicitly decides to make them part of vanilla.
 
@@ -56,6 +56,23 @@ Compile the smoke test client:
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:testClasses
 ```
 
+Run the Testcontainers helper jar tests. These include Spark/Iceberg S3 and GCS storage smoke tests by default:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :testcontainers:test
+```
+
+The default run depends on `:image:dockerBuildCustomHive313`, so it tests the helper jar against the current custom Hive 3 snapshot image running HMS through `HiveMetastoreContainer`. It does not build vanilla images by default; keep the matching vanilla base image available locally or in the configured registry.
+
+Skip the Docker-backed storage smoke tests only when you need a quick local helper-jar check:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :testcontainers:test \
+  -Ptestcontainers.skipStorageSmoke=true
+```
+
+Use `-Ptestcontainers.hmsImage=...` to test against an existing HMS image and skip the image build dependency. The storage tests start `localstack/localstack:4.14.0` for S3 and `fsouza/fake-gcs-server:1.54` for GCS, then configure Spark Iceberg with a Hive catalog through `HiveMetastoreContainer`.
+
 Run the full smoke test when the current custom image tags already exist locally or in the registry:
 
 ```bash
@@ -88,6 +105,8 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
   -PimageRegistry=ghcr.io/openprojectx
 ```
 
+The custom-images workflow runs the Gradle release task without skipping storage smoke tests, so the release pipeline also runs the Spark/Iceberg S3 and GCS smoke tests before publishing the helper jar.
+
 Build the selected local custom images as part of the smoke test only when needed:
 
 ```bash
@@ -110,7 +129,7 @@ sed -n '1,80p' image/build/docker/Hive420/Dockerfile.vanilla
 Inspect built image contents when changing dependency placement:
 
 ```bash
-IMAGE=ghcr.io/openprojectx/hive:0.1.1-SNAPSHOT-3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17
+IMAGE=ghcr.io/openprojectx/hive:3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17-0.1.1-SNAPSHOT
 
 docker run --rm --entrypoint bash "$IMAGE" -lc '
   find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" | sort
@@ -159,8 +178,31 @@ Expected tag behavior:
 
 ```text
 hive-vanilla:4.2.0-hadoop-3.4.2-jdk21
-hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 ```
+
+Clean up older local snapshot images after repeated local builds. Docker lists images newest first, so this keeps the newest local snapshot tag per image repository.
+
+Dry run:
+
+```bash
+docker images 'ghcr.io/openprojectx/hive*' \
+  --filter reference='*:*SNAPSHOT*' \
+  --format '{{.Repository}} {{.Tag}} {{.ID}} {{.CreatedAt}}' \
+  | awk '!seen[$1]++ { print "KEEP   " $0; next } { print "REMOVE " $0 }'
+```
+
+Remove older local snapshots:
+
+```bash
+docker images 'ghcr.io/openprojectx/hive*' \
+  --filter reference='*:*SNAPSHOT*' \
+  --format '{{.Repository}} {{.Tag}}' \
+  | awk 'seen[$1]++ { print $1 ":" $2 }' \
+  | xargs -r docker rmi
+```
+
+If Docker reports that an old image is still used by a stopped container, run `docker container prune` and retry the cleanup command.
 
 ## Release Process
 
@@ -174,6 +216,12 @@ Custom images are released by the **Custom Images** workflow. On push to `master
 - `next_version` by incrementing the patch version and appending `-SNAPSHOT`
 
 Manual workflow dispatch may override these values.
+
+The same Gradle `release` run publishes `:testcontainers` to GitHub Packages. The workflow exports `GITHUB_TOKEN`; local publishing needs equivalent credentials:
+
+```bash
+env GITHUB_ACTOR=<user> GITHUB_TOKEN=<token> GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :testcontainers:publish
+```
 
 ## Compatibility Notes
 

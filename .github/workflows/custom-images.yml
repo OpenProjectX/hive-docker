@@ -33,6 +33,7 @@ jobs:
       packages: write
     env:
       IMAGE_REGISTRY: ${{ inputs.image_registry || 'ghcr.io/openprojectx' }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:

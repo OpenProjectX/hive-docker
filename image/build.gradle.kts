@@ -42,6 +42,9 @@ dependencies {
     gcsRuntime(libs.bundles.gcsRuntime) {
         exclude(group = "org.apache.hadoop")
     }
+    gcsRuntime(libs.hadoopAws) {
+        exclude(group = "org.apache.hadoop")
+    }
     hive3Runtime(libs.commonsCollections)
     databaseRuntime(libs.postgresql) {
         isTransitive = false
@@ -143,10 +146,6 @@ fun extractedHiveDir(image: HiveTarballImage): String =
 
 fun dockerTagSuffix(image: HiveTarballImage, custom: Boolean): String =
     buildString {
-        if (custom) {
-            append(project.version)
-            append("-")
-        }
         append(image.hiveVersion)
         append("-hadoop-")
         append(hadoopVersion)
@@ -156,6 +155,10 @@ fun dockerTagSuffix(image: HiveTarballImage, custom: Boolean): String =
         }
         append("-jdk")
         append(image.jdkVersion)
+        if (custom) {
+            append("-")
+            append(project.version)
+        }
     }
 
 fun dockerImage(image: HiveTarballImage, custom: Boolean): String {
@@ -291,6 +294,11 @@ fun customDockerfile(image: HiveTarballImage): String {
             chmod +x /entrypoint.sh; \
             mkdir -p /opt/hadoop/share/hadoop/common/lib; \
             cp /tmp/gcs-libs/*.jar /opt/hadoop/share/hadoop/common/lib/; \
+            if [ "${image.hiveVersion}" = "3.1.3" ]; then \
+                for jar in /tmp/gcs-libs/guava-*.jar /tmp/gcs-libs/failureaccess-*.jar /tmp/gcs-libs/listenablefuture-*.jar /tmp/gcs-libs/disruptor-*.jar; do \
+                    cp "${'$'}jar" "/opt/hive/lib/0-${'$'}(basename "${'$'}jar")"; \
+                done; \
+            fi; \
             cp /tmp/database-libs/*.jar /opt/hive/lib/; \
             rm -rf /tmp/gcs-libs; \
             rm -rf /tmp/database-libs; \

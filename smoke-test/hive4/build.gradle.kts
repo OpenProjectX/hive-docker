@@ -32,8 +32,8 @@ val subjects = listOf(
         image = providers.gradleProperty("smoke.image.hive-standalone-metastore-4").orElse(
             provider {
                 "${imageRegistry.get()}/hive-standalone-metastore:" +
-                    "${project.version}-${libs.versions.hive.get()}-hadoop-${libs.versions.hadoop.get()}" +
-                    "-gcs-${libs.versions.gcsConnector.get()}-jdk21"
+                    "${libs.versions.hive.get()}-hadoop-${libs.versions.hadoop.get()}" +
+                    "-gcs-${libs.versions.gcsConnector.get()}-jdk21-${project.version}"
             }
         ),
         customBuildTask = ":image:dockerBuildCustomStandaloneMetastore420",
@@ -44,8 +44,8 @@ val subjects = listOf(
         image = providers.gradleProperty("smoke.image.hive4").orElse(
             provider {
                 "${imageRegistry.get()}/hive:" +
-                    "${project.version}-${libs.versions.hive.get()}-hadoop-${libs.versions.hadoop.get()}" +
-                    "-gcs-${libs.versions.gcsConnector.get()}-jdk21"
+                    "${libs.versions.hive.get()}-hadoop-${libs.versions.hadoop.get()}" +
+                    "-gcs-${libs.versions.gcsConnector.get()}-jdk21-${project.version}"
             }
         ),
         customBuildTask = ":image:dockerBuildCustomHive420",

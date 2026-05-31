@@ -5,9 +5,9 @@ Docker image build project for Apache Hive and Hive Standalone Metastore with Ap
 The project builds two image layers:
 
 - **Vanilla base images**: Apache Hive/HMS plus Hadoop only. These do not include this project's release version in the tag.
-- **Custom images**: built from the vanilla base images and add GCS connector dependencies. These include the Gradle project release version in the tag.
+- **Custom images**: built from the vanilla base images and add S3A, GCS connector, and PostgreSQL JDBC runtime dependencies. These include the Gradle project release version in the tag.
 
-No Maven artifacts are published from this repository. Release means Docker images only.
+Releases publish Docker images and the `hive-docker-testcontainers` helper jar.
 
 ## Images
 
@@ -15,8 +15,8 @@ No Maven artifacts are published from this repository. Release means Docker imag
 | --- | --- | --- |
 | `hive-vanilla` | Base Hive image | `<hive>-hadoop-<hadoop>-jdk<jdk>` |
 | `hive-standalone-metastore-vanilla` | Base standalone HMS image | `<hive>-hadoop-<hadoop>-jdk<jdk>` |
-| `hive` | Custom Hive image with GCS and PostgreSQL JDBC libraries | `<project>-<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>` |
-| `hive-standalone-metastore` | Custom standalone HMS image with GCS and PostgreSQL JDBC libraries | `<project>-<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>` |
+| `hive` | Custom Hive image with S3A, GCS, and PostgreSQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
+| `hive-standalone-metastore` | Custom standalone HMS image with S3A, GCS, and PostgreSQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
 
 Current versions are managed in [gradle/libs.versions.toml](gradle/libs.versions.toml):
 
@@ -31,13 +31,13 @@ Example tags:
 
 ```text
 ghcr.io/openprojectx/hive-vanilla:4.2.0-hadoop-3.4.2-jdk21
-ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
-ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 ```
 
 ## Build Model
 
-Vanilla Dockerfiles install only the original Apache Hive/HMS and Hadoop distributions. Custom Dockerfiles use the vanilla image as `FROM`, copy GCS runtime jars into Hadoop's common library directory, and copy the PostgreSQL JDBC driver into Hive's library directory:
+Vanilla Dockerfiles install only the original Apache Hive/HMS and Hadoop distributions. Custom Dockerfiles use the vanilla image as `FROM`, copy S3A and GCS runtime jars into Hadoop's common library directory, and copy the PostgreSQL JDBC driver into Hive's library directory:
 
 ```text
 /opt/hadoop/share/hadoop/common/lib
@@ -116,6 +116,16 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache \
 
 This task builds the custom images, runs smoke tests against the just-built local custom image tags, and only then pushes the custom images.
 
+The root `release` task also publishes the Testcontainers helper jar to GitHub Packages:
+
+```bash
+env GITHUB_ACTOR=<user> GITHUB_TOKEN=<token> GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
+  -Prelease.useAutomaticVersion=true \
+  -Prelease.releaseVersion=0.1.0 \
+  -Prelease.newVersion=0.1.1-SNAPSHOT \
+  -PimageRegistry=ghcr.io/openprojectx
+```
+
 Run the image-only release task:
 
 ```bash
@@ -125,6 +135,41 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache release \
   -Prelease.newVersion=0.1.1-SNAPSHOT \
   -PimageRegistry=ghcr.io/openprojectx
 ```
+
+## Testcontainers Module
+
+The `:testcontainers` module publishes the `hive-docker-testcontainers` helper jar and also owns integration-level storage smoke tests for Spark plus Iceberg.
+
+Run the Testcontainers module tests:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :testcontainers:test
+```
+
+By default, this includes the comprehensive Spark/Iceberg object-store smoke tests and first builds the current custom Hive 3 image with `:image:dockerBuildCustomHive313`. The tests start that image through `HiveMetastoreContainer` as HMS with `SERVICE_NAME=metastore`. It does not build vanilla images; the matching vanilla base image must already exist locally or be pullable by Docker.
+
+To skip those Docker-backed tests for a quick local run:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :testcontainers:test \
+  -Ptestcontainers.skipStorageSmoke=true
+```
+
+To use an already-built HMS image without running the image build task:
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :testcontainers:test \
+  -Ptestcontainers.hmsImage=ghcr.io/openprojectx/hive:3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17-0.1.2-SNAPSHOT
+```
+
+Those tests start these Testcontainers dependencies:
+
+```text
+localstack/localstack:4.14.0
+fsouza/fake-gcs-server:1.54
+```
+
+The S3 and GCS tests start `HiveMetastoreContainer`, configure Spark Iceberg with a Hive catalog through the HMS thrift URI, write and read Spark rows, then assert that Parquet data files exist in the backing object store.
 
 Run the smoke tests against image tags that already exist locally or in the registry:
 
@@ -171,9 +216,9 @@ To test specific image tags:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache smokeTest \
-  -Psmoke.image.hive-standalone-metastore-4=ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21 \
-  -Psmoke.image.hive4=ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21 \
-  -Psmoke.image.hive3=ghcr.io/openprojectx/hive:0.1.0-3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17
+  -Psmoke.image.hive-standalone-metastore-4=ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0 \
+  -Psmoke.image.hive4=ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0 \
+  -Psmoke.image.hive3=ghcr.io/openprojectx/hive:3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17-0.1.0
 ```
 
 To build the selected custom images locally before running the smoke test, use `-Psmoke.buildImage=true`. This is the normal local command when the current project version tag has not been published yet:
@@ -206,35 +251,215 @@ The Hive 4 smoke client uses JDK 21 because Hive 4.2.0 client artifacts are Java
 
 Add `-Dsmoke.containerLogs=true` to any smoke command when debugging container startup.
 
+## Docker Usage
+
+The three custom runtime images use the same base layout and the same metastore configuration model:
+
+| Subject | Image | JDK | Main use | Startup behavior |
+| --- | --- | --- | --- | --- |
+| Hive 3 | `ghcr.io/openprojectx/hive:3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17-<project>` | 17 | Hive 3 metastore compatibility | Full Hive image. Set `SERVICE_NAME=metastore` for HMS. |
+| Hive 4 | `ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-<project>` | 21 | Hive 4 services | Full Hive image. Set `SERVICE_NAME=metastore`, `hiveserver2`, `llap`, or `tezam`. |
+| Standalone HMS 4 | `ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-<project>` | 21 | HMS-only runtime | Always starts the metastore service. `SERVICE_NAME` is not required. |
+
+All custom images include:
+
+- Hadoop under `/opt/hadoop`
+- Hive or standalone HMS under `/opt/hive`
+- generated config under `/opt/hive/conf`
+- GCS runtime jars under `/opt/hadoop/share/hadoop/common/lib`
+- PostgreSQL JDBC driver under `/opt/hive/lib`
+
+Shared runtime inputs:
+
+| Env or mount | Default | Applies to | Purpose |
+| --- | --- | --- | --- |
+| `HIVE_CUSTOM_CONF_DIR` | unset | all custom images | Directory of custom config files to symlink into `/opt/hive/conf`. |
+| `/tmp/ext-jars` | unset | all custom images | Mount extra `*.jar` files; entrypoint copies them into `/opt/hive/lib` before startup. |
+| `HIVE_WAREHOUSE_PATH` | `/opt/hive/data/warehouse` | all custom images | Warehouse path used in generated config. |
+| `DB_DRIVER` | `derby` | all custom images | Use `derby`, `postgres`, or `postgresql`. |
+| `IS_RESUME` | `false` | all custom images | Set `true` to skip `schematool` schema initialization on restart. |
+| `VERBOSE` | unset | all custom images | Set `true` to pass verbose mode to schema initialization where supported. |
+| `SERVICE_OPTS` | unset | all custom images | Extra JVM options appended to `HADOOP_CLIENT_OPTS`. |
+| `METASTORE_PORT` | `9083` | HMS services | Metastore thrift port inside the container. |
+
+PostgreSQL envs are also shared by all custom images:
+
+| Env | Default |
+| --- | --- |
+| `POSTGRES_HOST` | `postgres` |
+| `POSTGRES_PORT` | `5432` |
+| `POSTGRES_DB` | `metastore` |
+| `POSTGRES_USER` | `hive` |
+| `POSTGRES_PASSWORD` | `hive` |
+| `METASTORE_DB_CONNECTION_URL` | derived from the `POSTGRES_*` values |
+| `METASTORE_DB_CONNECTION_DRIVER` | `org.postgresql.Driver` |
+| `METASTORE_DB_CONNECTION_USER_NAME` | derived from `POSTGRES_USER` |
+| `METASTORE_DB_CONNECTION_PASSWORD` | derived from `POSTGRES_PASSWORD` |
+
+The metastore database envs are intentionally the same across all three images. The full Hive images render `hive-site.xml` and select a service with `SERVICE_NAME`; the standalone HMS image renders `metastore-site.xml` and starts HMS directly.
+
+Run Hive 3 as HMS with embedded Derby:
+
+```bash
+docker run --rm -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
+  ghcr.io/openprojectx/hive:3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17-0.1.0
+```
+
+Run Hive 4 as HMS with embedded Derby:
+
+```bash
+docker run --rm -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+Run standalone HMS 4 with embedded Derby:
+
+```bash
+docker run --rm -p 9083:9083 \
+  ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+For persistent local Derby state, mount a writable data directory:
+
+```bash
+docker run --rm -p 9083:9083 \
+  -v "$PWD/.hive-data:/opt/hive/data" \
+  -e SERVICE_NAME=metastore \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+For production HMS usage, prefer PostgreSQL over embedded Derby and set `IS_RESUME=true` after the schema exists.
+
+Run HiveServer2 from the full Hive 4 image:
+
+```bash
+docker run --rm -p 10000:10000 \
+  -e SERVICE_NAME=hiveserver2 \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+Mount custom config files:
+
+```bash
+docker run --rm -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
+  -e HIVE_CUSTOM_CONF_DIR=/conf \
+  -v "$PWD/conf:/conf:ro" \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+Mount extra jars, for example a site-specific JDBC or filesystem dependency:
+
+```bash
+docker run --rm -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
+  -v "$PWD/ext-jars:/tmp/ext-jars:ro" \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+If Spark creates external tables with `s3a://` or `gs://` locations through HMS, the metastore usually stores the location string and Spark performs the object-store IO. Keep the object-store client libraries and credentials available in Spark as well as in HMS for any HMS-side validation, schema tooling, or service behavior that touches paths.
+
+## Testcontainers Helper
+
+The `:testcontainers` module publishes `org.openprojectx.hive.docker.core:hive-docker-testcontainers:<version>` to GitHub Packages. It provides image tag helpers and preconfigured HMS containers with the same tag format as the Docker build.
+
+Gradle dependency example:
+
+```kotlin
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/openprojectx/hive-docker")
+        credentials {
+            username = providers.gradleProperty("gpr.user").orElse(providers.environmentVariable("GITHUB_ACTOR")).get()
+            password = providers.gradleProperty("gpr.key").orElse(providers.environmentVariable("GITHUB_TOKEN")).get()
+        }
+    }
+}
+
+dependencies {
+    testImplementation("org.openprojectx.hive.docker.core:hive-docker-testcontainers:0.1.0")
+}
+```
+
+Usage example:
+
+```java
+import org.openprojectx.hive.docker.testcontainers.HiveMetastoreContainer;
+
+try (HiveMetastoreContainer metastore = HiveMetastoreContainer.standaloneMetastore4("0.1.0")) {
+    metastore.start();
+    String thriftUri = metastore.getThriftUri();
+}
+```
+
+PostgreSQL-backed HMS example:
+
+```java
+try (HiveMetastoreContainer metastore = HiveMetastoreContainer.hive4("0.1.0")
+    .withPostgres("postgres", 5432, "metastore", "hive", "hive")) {
+    metastore.start();
+}
+```
+
 ## PostgreSQL Metastore
 
 Custom images include the PostgreSQL JDBC driver in `/opt/hive/lib`. Vanilla images stay clean and do not include it.
 
 The metastore defaults to embedded Derby. Use PostgreSQL by setting `DB_DRIVER=postgres` and the PostgreSQL connection environment variables:
 
+Start a local PostgreSQL database for Docker testing:
+
 ```bash
-docker run --rm \
-  -e SERVICE_NAME=metastore \
-  -e DB_DRIVER=postgres \
-  -e POSTGRES_HOST=postgres \
-  -e POSTGRES_PORT=5432 \
+docker network create hive-smoke
+
+docker run -d --name hive-postgres --network hive-smoke \
   -e POSTGRES_DB=metastore \
   -e POSTGRES_USER=hive \
   -e POSTGRES_PASSWORD=hive \
-  ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+  postgres:16
 ```
 
-For standalone HMS 4:
+Run Hive 3 HMS against that PostgreSQL container:
 
 ```bash
-docker run --rm \
+docker run --rm --network hive-smoke -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
   -e DB_DRIVER=postgres \
-  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_HOST=hive-postgres \
   -e POSTGRES_PORT=5432 \
   -e POSTGRES_DB=metastore \
   -e POSTGRES_USER=hive \
   -e POSTGRES_PASSWORD=hive \
-  ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+  ghcr.io/openprojectx/hive:3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17-0.1.0
+```
+
+Run Hive 4 HMS against PostgreSQL:
+
+```bash
+docker run --rm --network hive-smoke -p 9083:9083 \
+  -e SERVICE_NAME=metastore \
+  -e DB_DRIVER=postgres \
+  -e POSTGRES_HOST=hive-postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DB=metastore \
+  -e POSTGRES_USER=hive \
+  -e POSTGRES_PASSWORD=hive \
+  ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+Run standalone HMS 4 against PostgreSQL:
+
+```bash
+docker run --rm --network hive-smoke -p 9083:9083 \
+  -e DB_DRIVER=postgres \
+  -e POSTGRES_HOST=hive-postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DB=metastore \
+  -e POSTGRES_USER=hive \
+  -e POSTGRES_PASSWORD=hive \
+  ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 ```
 
 The entrypoint turns those variables into Hive metastore JDO settings:
@@ -280,7 +505,7 @@ For production, use a managed or persistent PostgreSQL database, pass credential
 Set the image tag you want to inspect:
 
 ```bash
-IMAGE=ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+IMAGE=ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 ```
 
 Inspect image metadata and layers:
@@ -334,7 +559,7 @@ Compare vanilla and custom images to confirm that GCS jars are only in the custo
 
 ```bash
 VANILLA=ghcr.io/openprojectx/hive-vanilla:4.2.0-hadoop-3.4.2-jdk21
-CUSTOM=ghcr.io/openprojectx/hive:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+CUSTOM=ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 
 for image in "$VANILLA" "$CUSTOM"; do
   echo "== $image =="
@@ -349,7 +574,36 @@ done
 For standalone HMS 4, set `IMAGE` to the HMS tag:
 
 ```bash
-IMAGE=ghcr.io/openprojectx/hive-standalone-metastore:0.1.0-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
+IMAGE=ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
+## Clean Local Snapshot Images
+
+Local development can leave multiple `SNAPSHOT` image tags in the Docker cache. Docker lists images newest first, so this keeps the newest local snapshot tag per image repository and removes older snapshot tags.
+
+Dry run:
+
+```bash
+docker images 'ghcr.io/openprojectx/hive*' \
+  --filter reference='*:*SNAPSHOT*' \
+  --format '{{.Repository}} {{.Tag}} {{.ID}} {{.CreatedAt}}' \
+  | awk '!seen[$1]++ { print "KEEP   " $0; next } { print "REMOVE " $0 }'
+```
+
+Remove older local snapshots:
+
+```bash
+docker images 'ghcr.io/openprojectx/hive*' \
+  --filter reference='*:*SNAPSHOT*' \
+  --format '{{.Repository}} {{.Tag}}' \
+  | awk 'seen[$1]++ { print $1 ":" $2 }' \
+  | xargs -r docker rmi
+```
+
+If an old image is still referenced by a stopped container, remove stopped containers first:
+
+```bash
+docker container prune
 ```
 
 ## GitHub Workflows
@@ -366,14 +620,14 @@ The workflow caches Apache Hive/HMS and Hadoop release tarballs under `.cache/ap
 
 [.github/workflows/custom-images.yml](.github/workflows/custom-images.yml)
 
-Runs on pushes to `master` and can also be triggered manually. It runs the Gradle `release` task and publishes custom images only.
+Runs on pushes to `master` and can also be triggered manually. It runs the Gradle `release` task and publishes custom images plus the `hive-docker-testcontainers` jar.
 
 The release task validates the default smoke subjects before publishing custom images:
 
 ```text
-<imageRegistry>/hive-standalone-metastore:<project>-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
-<imageRegistry>/hive:<project>-4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21
-<imageRegistry>/hive:<project>-3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17
+<imageRegistry>/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-<project>
+<imageRegistry>/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-<project>
+<imageRegistry>/hive:3.1.3-hadoop-3.4.2-gcs-4.0.4-jdk17-<project>
 ```
 
 Those are the same tags produced by the current custom image build in the workflow.

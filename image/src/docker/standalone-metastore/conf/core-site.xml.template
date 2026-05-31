@@ -17,6 +17,10 @@
 -->
 <configuration>
   <property>
+    <name>fs.s3a.impl</name>
+    <value>${S3A_FILE_SYSTEM_IMPL}</value>
+  </property>
+  <property>
     <name>fs.s3a.endpoint</name>
     <value>${S3_ENDPOINT_URL}</value>
   </property>
@@ -27,5 +31,61 @@
   <property>
     <name>fs.s3a.secret.key</name>
     <value>${AWS_SECRET_ACCESS_KEY}</value>
+  </property>
+  <property>
+    <name>fs.s3a.path.style.access</name>
+    <value>${S3_PATH_STYLE_ACCESS}</value>
+  </property>
+  <property>
+    <name>fs.s3a.connection.ssl.enabled</name>
+    <value>${S3_SSL_ENABLED}</value>
+  </property>
+  <property>
+    <name>fs.gs.impl</name>
+    <value>${GCS_FILE_SYSTEM_IMPL}</value>
+  </property>
+  <property>
+    <name>fs.AbstractFileSystem.gs.impl</name>
+    <value>${GCS_ABSTRACT_FILE_SYSTEM_IMPL}</value>
+  </property>
+  <property>
+    <name>fs.gs.auth.type</name>
+    <value>${GCS_AUTH_TYPE}</value>
+  </property>
+  <property>
+    <name>fs.gs.project.id</name>
+    <value>${GCS_PROJECT_ID}</value>
+  </property>
+  <property>
+    <name>fs.gs.storage.root.url</name>
+    <value>${GCS_STORAGE_ROOT_URL}</value>
+  </property>
+  <property>
+    <name>fs.gs.storage.service.path</name>
+    <value>${GCS_STORAGE_SERVICE_PATH}</value>
+  </property>
+  <property>
+    <name>fs.gs.create.items.conflict.check.enable</name>
+    <value>${GCS_CREATE_ITEMS_CONFLICT_CHECK_ENABLED}</value>
+  </property>
+  <property>
+    <name>fs.gs.client.upload.type</name>
+    <value>${GCS_CLIENT_UPLOAD_TYPE}</value>
+  </property>
+  <property>
+    <name>fs.gs.outputstream.direct.upload.enable</name>
+    <value>${GCS_DIRECT_UPLOAD_ENABLED}</value>
+  </property>
+  <property>
+    <name>fs.gs.performance.cache.enable</name>
+    <value>${GCS_PERFORMANCE_CACHE_ENABLED}</value>
+  </property>
+  <property>
+    <name>fs.gs.storage.client.cache.enable</name>
+    <value>${GCS_STORAGE_CLIENT_CACHE_ENABLED}</value>
+  </property>
+  <property>
+    <name>fs.gs.grpc.enable</name>
+    <value>${GCS_GRPC_ENABLED}</value>
   </property>
 </configuration>
