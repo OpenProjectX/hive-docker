@@ -7,6 +7,7 @@ import org.apache.thrift.TException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -27,6 +28,10 @@ class Hive4MetastoreSmokeTest {
     private static final String POSTGRES_DATABASE = "metastore";
     private static final String POSTGRES_USER = "hive";
     private static final String POSTGRES_PASSWORD = "hive";
+    private static final String MYSQL_ALIAS = "mysql";
+    private static final String MYSQL_DATABASE = "metastore";
+    private static final String MYSQL_USER = "hive";
+    private static final String MYSQL_PASSWORD = "hive";
 
     static Stream<Subject> hive4Subjects() {
         String subjects = System.getProperty("smoke.hive4.subjects", "");
@@ -74,6 +79,30 @@ class Hive4MetastoreSmokeTest {
         }
     }
 
+    @ParameterizedTest(name = "{0} with MySQL")
+    @MethodSource("hive4Subjects")
+    void hive4ImageInitializesMysqlSchemaAndAcceptsHiveMetastoreClientRequests(Subject subject) throws Exception {
+        try (
+            Network network = Network.newNetwork();
+            MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0.44-bookworm")
+                .withDatabaseName(MYSQL_DATABASE)
+                .withUsername(MYSQL_USER)
+                .withPassword(MYSQL_PASSWORD)
+                .withNetwork(network)
+                .withNetworkAliases(MYSQL_ALIAS);
+            GenericContainer<?> metastore = mysqlMetastoreContainer(subject, network)
+        ) {
+            mysql.start();
+            metastore.start();
+
+            assertMetastoreAcceptsClientRequests(
+                subject.id(),
+                metastore,
+                "smoke_mysql_" + subject.id().replace('-', '_')
+            );
+        }
+    }
+
     private void assertMetastoreAcceptsClientRequests(
         String subjectId,
         GenericContainer<?> metastore,
@@ -111,6 +140,22 @@ class Hive4MetastoreSmokeTest {
         environment.put("POSTGRES_DB", POSTGRES_DATABASE);
         environment.put("POSTGRES_USER", POSTGRES_USER);
         environment.put("POSTGRES_PASSWORD", POSTGRES_PASSWORD);
+
+        return withOptionalContainerLogs(new GenericContainer<>(DockerImageName.parse(subject.image()))
+            .withNetwork(network)
+            .withExposedPorts(METASTORE_PORT)
+            .withEnv(environment)
+            .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofMinutes(4))));
+    }
+
+    private GenericContainer<?> mysqlMetastoreContainer(Subject subject, Network network) {
+        Map<String, String> environment = new LinkedHashMap<>(subject.environment());
+        environment.put("DB_DRIVER", "mysql");
+        environment.put("MYSQL_HOST", MYSQL_ALIAS);
+        environment.put("MYSQL_PORT", "3306");
+        environment.put("MYSQL_DB", MYSQL_DATABASE);
+        environment.put("MYSQL_USER", MYSQL_USER);
+        environment.put("MYSQL_PASSWORD", MYSQL_PASSWORD);
 
         return withOptionalContainerLogs(new GenericContainer<>(DockerImageName.parse(subject.image()))
             .withNetwork(network)

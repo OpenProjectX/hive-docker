@@ -148,19 +148,19 @@ docker run --rm --entrypoint bash "$IMAGE" -lc '
   /opt/hadoop/bin/hadoop version | head -n 2
   find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" \
     | sort \
-    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore|postgresql)-"
+    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore|postgresql|mysql-connector-j)-"
 '
 ```
 
-When changing PostgreSQL support, confirm the custom image contains the driver and the vanilla image does not:
+When changing external database support, confirm the custom image contains the JDBC drivers and the vanilla image does not:
 
 ```bash
 docker run --rm --entrypoint bash "$IMAGE" -lc '
-  find /opt/hive/lib -type f -name "postgresql-*.jar" | sort
+  find /opt/hive/lib -type f \( -name "postgresql-*.jar" -o -name "mysql-connector-j-*.jar" \) | sort
 '
 ```
 
-Also run the PostgreSQL-backed HMS smoke tests after rebuilding the custom images:
+Also run the PostgreSQL-backed and MySQL-backed HMS smoke tests after rebuilding the custom images:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :image:dockerBuildCustomHive313 \
@@ -174,8 +174,18 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-tes
   -Psmoke.subjects=hive3 \
   -PimageRegistry=ghcr.io/openprojectx
 
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
+  --tests 'org.openprojectx.hive.docker.smoke.hive3.Hive3MetastoreSmokeTest.hive3ImageInitializesMysqlSchemaAndAcceptsHive3MetastoreClientRequests' \
+  -Psmoke.subjects=hive3 \
+  -PimageRegistry=ghcr.io/openprojectx
+
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \
   --tests 'org.openprojectx.hive.docker.smoke.hive4.Hive4MetastoreSmokeTest.hive4ImageInitializesPostgresSchemaAndAcceptsHiveMetastoreClientRequests' \
+  -Psmoke.subjects=hive-standalone-metastore-4 \
+  -PimageRegistry=ghcr.io/openprojectx
+
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive4:test \
+  --tests 'org.openprojectx.hive.docker.smoke.hive4.Hive4MetastoreSmokeTest.hive4ImageInitializesMysqlSchemaAndAcceptsHiveMetastoreClientRequests' \
   -Psmoke.subjects=hive-standalone-metastore-4 \
   -PimageRegistry=ghcr.io/openprojectx
 ```

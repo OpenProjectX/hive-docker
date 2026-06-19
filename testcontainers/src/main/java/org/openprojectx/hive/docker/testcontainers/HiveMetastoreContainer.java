@@ -59,6 +59,22 @@ public class HiveMetastoreContainer extends GenericContainer<HiveMetastoreContai
         return self();
     }
 
+    public HiveMetastoreContainer withMysql(
+        String host,
+        int port,
+        String database,
+        String username,
+        String password
+    ) {
+        withEnv("DB_DRIVER", "mysql");
+        withEnv("MYSQL_HOST", host);
+        withEnv("MYSQL_PORT", Integer.toString(port));
+        withEnv("MYSQL_DB", database);
+        withEnv("MYSQL_USER", username);
+        withEnv("MYSQL_PASSWORD", password);
+        return self();
+    }
+
     public HiveMetastoreContainer withResume(boolean resume) {
         withEnv("IS_RESUME", Boolean.toString(resume));
         return self();

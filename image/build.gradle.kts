@@ -49,6 +49,9 @@ dependencies {
     databaseRuntime(libs.postgresql) {
         isTransitive = false
     }
+    databaseRuntime(libs.mysqlConnector) {
+        isTransitive = false
+    }
 }
 
 data class HiveTarballImage(
@@ -77,6 +80,7 @@ val priorityJarRemovePatterns = providers.gradleProperty("image.priorityJarRemov
 val hadoopVersion = libs.versions.hadoop.get()
 val gcsConnectorVersion = libs.versions.gcsConnector.get()
 val postgresqlVersion = libs.versions.postgresql.get()
+val mysqlConnectorVersion = libs.versions.mysqlConnector.get()
 val hadoopUrl = "https://archive.apache.org/dist/hadoop/core/hadoop-$hadoopVersion/hadoop-$hadoopVersion.tar.gz"
 val gitCommitShort = providers.environmentVariable("GITHUB_SHA")
     .map { it.take(8) }
@@ -424,6 +428,7 @@ val generateDockerfiles by tasks.registering {
     inputs.property("hadoopVersion", hadoopVersion)
     inputs.property("gcsConnectorVersion", gcsConnectorVersion)
     inputs.property("postgresqlVersion", postgresqlVersion)
+    inputs.property("mysqlConnectorVersion", mysqlConnectorVersion)
     inputs.property("jarConflictStrategy", jarConflictStrategy)
     inputs.property("priorityJarDir", priorityJarDir.orElse(""))
     inputs.property("priorityJarRemovePatterns", priorityJarRemovePatterns.map { it.joinToString(",") })

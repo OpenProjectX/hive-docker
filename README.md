@@ -5,7 +5,7 @@ Docker image build project for Apache Hive and Hive Standalone Metastore with Ap
 The project builds two image layers:
 
 - **Vanilla base images**: Apache Hive/HMS plus Hadoop only. These do not include this project's release version in the tag.
-- **Custom images**: built from the vanilla base images and add S3A, GCS connector, and PostgreSQL JDBC runtime dependencies. These include the Gradle project release version in the tag.
+- **Custom images**: built from the vanilla base images and add S3A, GCS connector, and PostgreSQL/MySQL JDBC runtime dependencies. These include the Gradle project release version in the tag.
 
 Releases publish Docker images and the `hive-docker-testcontainers` helper jar.
 
@@ -15,8 +15,8 @@ Releases publish Docker images and the `hive-docker-testcontainers` helper jar.
 | --- | --- | --- |
 | `hive-vanilla` | Base Hive image | `<hive>-hadoop-<hadoop>-jdk<jdk>` |
 | `hive-standalone-metastore-vanilla` | Base standalone HMS image | `<hive>-hadoop-<hadoop>-jdk<jdk>` |
-| `hive` | Custom Hive image with S3A, GCS, and PostgreSQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
-| `hive-standalone-metastore` | Custom standalone HMS image with S3A, GCS, and PostgreSQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
+| `hive` | Custom Hive image with S3A, GCS, and PostgreSQL/MySQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
+| `hive-standalone-metastore` | Custom standalone HMS image with S3A, GCS, and PostgreSQL/MySQL JDBC libraries | `<hive>-hadoop-<hadoop>-gcs-<gcs>-jdk<jdk>-<project>` |
 
 Every build also tags the same image with the first 8 characters of the Git commit appended to the normal tag, for example `<normal-tag>-1a2b3c4d`. Use the normal tag for stable version selection and the commit tag for traceability.
 
@@ -25,6 +25,7 @@ Current versions are managed in [gradle/libs.versions.toml](gradle/libs.versions
 - Hadoop: `3.4.2`
 - GCS connector: `4.0.4`
 - PostgreSQL JDBC: `42.7.4`
+- MySQL Connector/J: `8.4.0`
 - Hive: `3.1.3`, `4.2.0`
 - Standalone metastore: `4.2.0`
 - JDK: `17` for Hive 3.1.3, `21` for Hive 4.2.0/HMS 4.2.0
@@ -39,7 +40,7 @@ ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk2
 
 ## Build Model
 
-Vanilla Dockerfiles install only the original Apache Hive/HMS and Hadoop distributions. Custom Dockerfiles use the vanilla image as `FROM`, copy S3A and GCS runtime jars into Hadoop's common library directory, and copy the PostgreSQL JDBC driver into Hive's library directory:
+Vanilla Dockerfiles install only the original Apache Hive/HMS and Hadoop distributions. Custom Dockerfiles use the vanilla image as `FROM`, copy S3A and GCS runtime jars into Hadoop's common library directory, and copy PostgreSQL and MySQL JDBC drivers into Hive's library directory:
 
 ```text
 /opt/hadoop/share/hadoop/common/lib
@@ -294,7 +295,7 @@ All custom images include:
 - Hive or standalone HMS under `/opt/hive`
 - generated config under `/opt/hive/conf`
 - GCS runtime jars under `/opt/hadoop/share/hadoop/common/lib`
-- PostgreSQL JDBC driver under `/opt/hive/lib`
+- PostgreSQL and MySQL JDBC drivers under `/opt/hive/lib`
 
 Shared runtime inputs:
 
@@ -303,7 +304,7 @@ Shared runtime inputs:
 | `HIVE_CUSTOM_CONF_DIR` | unset | all custom images | Directory of custom config files to symlink into `/opt/hive/conf`. |
 | `/tmp/ext-jars` | unset | all custom images | Mount extra `*.jar` files; entrypoint copies them into `/opt/hive/lib` before startup. This is a runtime convenience path, not the preferred conflict-replacement path. |
 | `HIVE_WAREHOUSE_PATH` | `/opt/hive/data/warehouse` | all custom images | Warehouse path used in generated config. |
-| `DB_DRIVER` | `derby` | all custom images | Use `derby`, `postgres`, or `postgresql`. |
+| `DB_DRIVER` | `derby` | all custom images | Use `derby`, `postgres`, `postgresql`, or `mysql`. |
 | `IS_RESUME` | `false` | all custom images | Set `true` to skip `schematool` schema initialization on restart. |
 | `VERBOSE` | unset | all custom images | Set `true` to pass verbose mode to schema initialization where supported. |
 | `HIVE_LOG_LEVEL` | `INFO` | all custom images | Root Hive log4j2 level, for example `DEBUG` while troubleshooting. |
@@ -326,6 +327,20 @@ PostgreSQL envs are also shared by all custom images:
 | `METASTORE_DB_CONNECTION_DRIVER` | `org.postgresql.Driver` |
 | `METASTORE_DB_CONNECTION_USER_NAME` | derived from `POSTGRES_USER` |
 | `METASTORE_DB_CONNECTION_PASSWORD` | derived from `POSTGRES_PASSWORD` |
+
+MySQL envs are also shared by all custom images:
+
+| Env | Default |
+| --- | --- |
+| `MYSQL_HOST` | `mysql` |
+| `MYSQL_PORT` | `3306` |
+| `MYSQL_DB` | `metastore` |
+| `MYSQL_USER` | `hive` |
+| `MYSQL_PASSWORD` | `hive` |
+| `METASTORE_DB_CONNECTION_URL` | derived from the `MYSQL_*` values |
+| `METASTORE_DB_CONNECTION_DRIVER` | `com.mysql.cj.jdbc.Driver` |
+| `METASTORE_DB_CONNECTION_USER_NAME` | derived from `MYSQL_USER` |
+| `METASTORE_DB_CONNECTION_PASSWORD` | derived from `MYSQL_PASSWORD` |
 
 The metastore database envs are intentionally the same across all three images. The full Hive images render `hive-site.xml` and select a service with `SERVICE_NAME`; the standalone HMS image renders `metastore-site.xml` and starts HMS directly.
 
@@ -361,7 +376,7 @@ docker run --rm -p 9083:9083 \
   ghcr.io/openprojectx/hive:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 ```
 
-For production HMS usage, prefer PostgreSQL over embedded Derby and set `IS_RESUME=true` after the schema exists.
+For production HMS usage, prefer an external PostgreSQL or MySQL database over embedded Derby and set `IS_RESUME=true` after the schema exists.
 
 Run HiveServer2 from the full Hive 4 image:
 
@@ -452,11 +467,16 @@ try (HiveMetastoreContainer metastore = HiveMetastoreContainer.hive4("0.1.0")
     .withPostgres("postgres", 5432, "metastore", "hive", "hive")) {
     metastore.start();
 }
+
+try (HiveMetastoreContainer metastore = HiveMetastoreContainer.standaloneMetastore4("0.1.0")
+    .withMysql("mysql", 3306, "metastore", "hive", "hive")) {
+    metastore.start();
+}
 ```
 
-## PostgreSQL Metastore
+## External Metastore Databases
 
-Custom images include the PostgreSQL JDBC driver in `/opt/hive/lib`. Vanilla images stay clean and do not include it.
+Custom images include PostgreSQL and MySQL JDBC drivers in `/opt/hive/lib`. Vanilla images stay clean and do not include them.
 
 The metastore defaults to embedded Derby. Use PostgreSQL by setting `DB_DRIVER=postgres` and the PostgreSQL connection environment variables:
 
@@ -513,6 +533,30 @@ docker run --rm --network hive-smoke -p 9083:9083 \
   ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
 ```
 
+Use MySQL by setting `DB_DRIVER=mysql` and the MySQL connection environment variables:
+
+```bash
+docker run -d --name hive-mysql --network hive-smoke \
+  -e MYSQL_DATABASE=metastore \
+  -e MYSQL_USER=hive \
+  -e MYSQL_PASSWORD=hive \
+  -e MYSQL_ROOT_PASSWORD=root \
+  mysql:8.0.44-bookworm
+```
+
+Run standalone HMS 4 against MySQL:
+
+```bash
+docker run --rm --network hive-smoke -p 9083:9083 \
+  -e DB_DRIVER=mysql \
+  -e MYSQL_HOST=hive-mysql \
+  -e MYSQL_PORT=3306 \
+  -e MYSQL_DB=metastore \
+  -e MYSQL_USER=hive \
+  -e MYSQL_PASSWORD=hive \
+  ghcr.io/openprojectx/hive-standalone-metastore:4.2.0-hadoop-3.4.2-gcs-4.0.4-jdk21-0.1.0
+```
+
 The entrypoint turns those variables into Hive metastore JDO settings:
 
 ```text
@@ -520,6 +564,15 @@ javax.jdo.option.ConnectionURL=jdbc:postgresql://<POSTGRES_HOST>:<POSTGRES_PORT>
 javax.jdo.option.ConnectionDriverName=org.postgresql.Driver
 javax.jdo.option.ConnectionUserName=<POSTGRES_USER>
 javax.jdo.option.ConnectionPassword=<POSTGRES_PASSWORD>
+```
+
+For MySQL, the derived settings are:
+
+```text
+javax.jdo.option.ConnectionURL=jdbc:mysql://<MYSQL_HOST>:<MYSQL_PORT>/<MYSQL_DB>?useSSL=false&allowPublicKeyRetrieval=true
+javax.jdo.option.ConnectionDriverName=com.mysql.cj.jdbc.Driver
+javax.jdo.option.ConnectionUserName=<MYSQL_USER>
+javax.jdo.option.ConnectionPassword=<MYSQL_PASSWORD>
 ```
 
 Override the full JDBC URL directly when needed:
@@ -532,11 +585,18 @@ Schema initialization runs by default. Set `IS_RESUME=true` to skip schema initi
 
 For external databases, the custom entrypoint passes the JDBC URL, driver, username, and password directly to `schematool`, so first startup initializes or upgrades the schema against the configured database instead of falling back to Derby.
 
-The Hive 3 and Hive 4 smoke tests cover this path with Testcontainers and `postgres:16`:
+The Hive 3 and Hive 4 smoke tests cover this path with Testcontainers, `postgres:16`, and `mysql:8.0.44-bookworm`:
 
 ```bash
 env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
   --tests 'org.openprojectx.hive.docker.smoke.hive3.Hive3MetastoreSmokeTest.hive3ImageInitializesPostgresSchemaAndAcceptsHive3MetastoreClientRequests' \
+  -Psmoke.subjects=hive3 \
+  -PimageRegistry=ghcr.io/openprojectx
+```
+
+```bash
+env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-test:hive3:test \
+  --tests 'org.openprojectx.hive.docker.smoke.hive3.Hive3MetastoreSmokeTest.hive3ImageInitializesMysqlSchemaAndAcceptsHive3MetastoreClientRequests' \
   -Psmoke.subjects=hive3 \
   -PimageRegistry=ghcr.io/openprojectx
 ```
@@ -549,7 +609,7 @@ env GRADLE_USER_HOME=/data/.gradle ./gradlew --no-configuration-cache :smoke-tes
 
 Add `-Dsmoke.containerLogs=true` when debugging container startup.
 
-For production, use a managed or persistent PostgreSQL database, pass credentials through your runtime secret mechanism, and keep `IS_RESUME=false` only for first deploys or planned schema upgrades. After the schema exists, set `IS_RESUME=true` for normal restarts.
+For production, use a managed or persistent PostgreSQL or MySQL database, pass credentials through your runtime secret mechanism, and keep `IS_RESUME=false` only for first deploys or planned schema upgrades. After the schema exists, set `IS_RESUME=true` for normal restarts.
 
 ## Inspect Images
 
@@ -602,7 +662,7 @@ docker run --rm --entrypoint bash "$IMAGE" -lc '
   test -x /opt/hive/bin/hive && /opt/hive/bin/hive --version | head -n 2 || true
   find /opt/hadoop/share/hadoop /opt/hive -type f -name "*.jar" \
     | sort \
-    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore|postgresql)-"
+    | grep -E "/(hadoop-common|hadoop-aws|aws-java-sdk-bundle|gcs-connector|gcsio|util-hadoop|hive-metastore|postgresql|mysql-connector-j)-"
 '
 ```
 

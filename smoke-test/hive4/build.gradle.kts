@@ -11,8 +11,10 @@ java {
 dependencies {
     testImplementation(libs.hiveMetastore)
     testImplementation(libs.junitJupiter)
+    testImplementation(libs.mysqlConnector)
     testImplementation(libs.slf4jSimple)
     testImplementation(libs.testcontainersJunitJupiter)
+    testImplementation(libs.testcontainersMysql)
     testImplementation(libs.testcontainersPostgresql)
     testRuntimeOnly(libs.junitPlatformLauncher)
 }

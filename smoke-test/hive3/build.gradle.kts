@@ -12,8 +12,10 @@ dependencies {
     testImplementation(libs.hiveMetastore3)
     testImplementation(libs.hadoopMapreduceClientCore)
     testImplementation(libs.junitJupiter)
+    testImplementation(libs.mysqlConnector)
     testImplementation(libs.slf4jSimple)
     testImplementation(libs.testcontainersJunitJupiter)
+    testImplementation(libs.testcontainersMysql)
     testImplementation(libs.testcontainersPostgresql)
     testRuntimeOnly(libs.junitPlatformLauncher)
 }

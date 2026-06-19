@@ -13,6 +13,7 @@ hive = "4.2.0"
 hive3 = "3.1.3"
 commonsCollections = "3.2.2"
 postgresql = "42.7.4"
+mysqlConnector = "8.4.0"
 spark = "3.5.8"
 iceberg = "1.10.1"
 junitJupiter = "5.11.4"
@@ -43,6 +44,7 @@ gcsio = { module = "com.google.cloud.bigdataoss:gcsio", version.ref = "gcsConnec
 gcsUtilHadoop = { module = "com.google.cloud.bigdataoss:util-hadoop", version.ref = "gcsConnector" }
 commonsCollections = { module = "commons-collections:commons-collections", version.ref = "commonsCollections" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+mysqlConnector = { module = "com.mysql:mysql-connector-j", version.ref = "mysqlConnector" }
 sparkSql = { module = "org.apache.spark:spark-sql_2.12", version.ref = "spark" }
 sparkHive = { module = "org.apache.spark:spark-hive_2.12", version.ref = "spark" }
 icebergSparkRuntime = { module = "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12", version.ref = "iceberg" }
@@ -56,6 +58,7 @@ testcontainersJunitJupiter = { module = "org.testcontainers:junit-jupiter", vers
 testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
 testcontainersLocalstack = { module = "org.testcontainers:localstack", version.ref = "testcontainers" }
 testcontainersPostgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+testcontainersMysql = { module = "org.testcontainers:mysql", version.ref = "testcontainers" }
 
 # Libraries can be bundled together for easier import
 [bundles]

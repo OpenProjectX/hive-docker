@@ -74,7 +74,7 @@
     </property>
     <property>
         <name>javax.jdo.option.ConnectionURL</name>
-        <value>${METASTORE_DB_CONNECTION_URL}</value>
+        <value>${METASTORE_DB_CONNECTION_URL_XML}</value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>

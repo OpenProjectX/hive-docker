@@ -59,6 +59,11 @@ envsubst < $HIVE_HOME/conf/tez-site.xml.template > $HIVE_HOME/conf/tez-site.xml
 : "${POSTGRES_DB:=metastore}"
 : "${POSTGRES_USER:=hive}"
 : "${POSTGRES_PASSWORD:=hive}"
+: "${MYSQL_HOST:=mysql}"
+: "${MYSQL_PORT:=3306}"
+: "${MYSQL_DB:=metastore}"
+: "${MYSQL_USER:=hive}"
+: "${MYSQL_PASSWORD:=hive}"
 
 case "$DB_DRIVER" in
   postgres|postgresql)
@@ -67,6 +72,13 @@ case "$DB_DRIVER" in
     : "${METASTORE_DB_CONNECTION_DRIVER:=org.postgresql.Driver}"
     : "${METASTORE_DB_CONNECTION_USER_NAME:=${POSTGRES_USER}}"
     : "${METASTORE_DB_CONNECTION_PASSWORD:=${POSTGRES_PASSWORD}}"
+    ;;
+  mysql)
+    DB_DRIVER="mysql"
+    : "${METASTORE_DB_CONNECTION_URL:=jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?useSSL=false&allowPublicKeyRetrieval=true}"
+    : "${METASTORE_DB_CONNECTION_DRIVER:=com.mysql.cj.jdbc.Driver}"
+    : "${METASTORE_DB_CONNECTION_USER_NAME:=${MYSQL_USER}}"
+    : "${METASTORE_DB_CONNECTION_PASSWORD:=${MYSQL_PASSWORD}}"
     ;;
   derby)
     : "${METASTORE_DB_CONNECTION_URL:=jdbc:derby:;databaseName=metastore_db;create=true}"
@@ -90,6 +102,7 @@ export METASTORE_DB_CONNECTION_URL
 export METASTORE_DB_CONNECTION_DRIVER
 export METASTORE_DB_CONNECTION_USER_NAME
 export METASTORE_DB_CONNECTION_PASSWORD
+export METASTORE_DB_CONNECTION_URL_XML="${METASTORE_DB_CONNECTION_URL//&/&amp;}"
 
 envsubst < $HIVE_HOME/conf/hive-site.xml.template > $HIVE_HOME/conf/hive-site.xml
 
